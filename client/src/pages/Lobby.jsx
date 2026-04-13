@@ -1,13 +1,13 @@
 // ============================================================
 // pages/Lobby.jsx — Schermata di attesa prima della partita
 // ============================================================
-export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
-  console.log("LOBBY MONTATA - player:", player);
-  
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
 
 export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
+  console.log("LOBBY MONTATA - player:", player);
+  console.log("LOBBY MONTATA - isHost:", player?.isHost);
+
   const [room, setRoom] = useState(initialRoom || { players: [player], code: roomCode });
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
@@ -53,8 +53,6 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
   };
 
   const isHost = player?.isHost;
-  console.log("DEBUG player:", player);
-  console.log("DEBUG isHost:", isHost);
   const canStart = room.players.length === 2;
 
   return (
