@@ -1,6 +1,6 @@
 # 🎮 Pixel Arcade — Piattaforma Multiplayer Web
 
-Piattaforma multiplayer browser-based ispirata a TETR.IO.  
+Piattaforma multiplayer browser.  
 Nessuna registrazione richiesta. Gioca con gli amici tramite codice stanza.
 
 **Stack:** React + Vite · Node.js · Socket.io · Render · Cloudflare Pages
