@@ -1,6 +1,9 @@
 // ============================================================
 // pages/Lobby.jsx — Schermata di attesa prima della partita
 // ============================================================
+export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
+  console.log("LOBBY MONTATA - player:", player);
+  
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
 
