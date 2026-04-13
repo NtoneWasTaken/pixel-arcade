@@ -20,8 +20,8 @@ export default function Home({ onRoomJoined }) {
 
     const handlePlayerJoined = ({ room }) => {
       setLoading(false);
-      const me = room.players.find((p) => p.id === socket.id);
-      onRoomJoined({ roomCode: room.code, player: me, isHost: false, room });
+      const me = room.players[room.players.length - 1]; // ultimo entrato = me
+      onRoomJoined({ roomCode: room.code, player: { ...me, isHost: false }, isHost: false, room });
     };
 
     const handleError = ({ message }) => {

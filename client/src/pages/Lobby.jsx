@@ -50,6 +50,8 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
   };
 
   const isHost = player?.isHost;
+  console.log("DEBUG player:", player);
+  console.log("DEBUG isHost:", isHost);
   const canStart = room.players.length === 2;
 
   return (
