@@ -1,31 +1,28 @@
 // ============================================================
-// pages/Lobby.jsx — Schermata di attesa prima della partita
+// pages/Lobby.jsx — Con selezione modalità timer Blitz
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
 
-export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
-  console.log("LOBBY MONTATA - player:", player);
-  console.log("LOBBY MONTATA - isHost:", player?.isHost);
+const TIMER_OPTIONS = [
+  { label: "Nessun timer", value: 0, icon: "∞" },
+  { label: "10 secondi", value: 10, icon: "10s" },
+  { label: "5 secondi", value: 5, icon: "5s" },
+];
 
+export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
   const [room, setRoom] = useState(initialRoom || { players: [player], code: roomCode });
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [timerSeconds, setTimerSeconds] = useState(0);
 
   useEffect(() => {
-    const handlePlayerJoined = ({ room: updatedRoom }) => {
-      setRoom(updatedRoom);
-    };
-
-    const handleGameStarted = ({ gameState }) => {
-      onGameStart(gameState);
-    };
-
+    const handlePlayerJoined = ({ room: updatedRoom }) => setRoom(updatedRoom);
+    const handleGameStarted = ({ gameState }) => onGameStart(gameState);
     const handlePlayerLeft = ({ room: updatedRoom, message }) => {
       setRoom(updatedRoom);
       setError(message);
     };
-
     const handleError = ({ message }) => setError(message);
 
     socket.on("player_joined", handlePlayerJoined);
@@ -43,7 +40,7 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
   const handleStart = () => {
     setError("");
-    socket.emit("start_game");
+    socket.emit("start_game", { timerSeconds });
   };
 
   const copyCode = () => {
@@ -67,7 +64,7 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
         <p className="code-label">Codice stanza</p>
         <div className="code-display">
           <span className="code-text">{roomCode}</span>
-          <button className="btn btn-ghost btn-sm copy-btn" onClick={copyCode}>
+          <button className="btn btn-ghost btn-sm" onClick={copyCode}>
             {copied ? "✓ Copiato!" : "Copia"}
           </button>
         </div>
@@ -95,6 +92,32 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
           )}
         </div>
       </div>
+
+      {/* Selezione timer — solo l'host può cambiarla */}
+      {isHost && (
+        <div className="timer-section">
+          <h3 className="section-title">⏱ Modalità Timer</h3>
+          <div className="timer-options">
+            {TIMER_OPTIONS.map((opt) => (
+              <button
+                key={opt.value}
+                className={`timer-option ${timerSeconds === opt.value ? "selected" : ""}`}
+                onClick={() => setTimerSeconds(opt.value)}
+              >
+                <span className="timer-icon">{opt.icon}</span>
+                <span className="timer-label">{opt.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!isHost && (
+        <div className="timer-section">
+          <h3 className="section-title">⏱ Modalità Timer</h3>
+          <p className="waiting-msg">L&apos;host sceglierà la modalità timer.</p>
+        </div>
+      )}
 
       {error && <div className="error-msg">⚠ {error}</div>}
 
