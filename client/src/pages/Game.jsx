@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Game.jsx — Con TimerBar incorporata (no import esterno)
+// pages/Game.jsx — Timer Blitz + animazioni Modalità Random
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -61,14 +61,24 @@ export default function Game({ initialGameState, player, onLeave }) {
   const [message, setMessage] = useState("");
   const [skippedMsg, setSkippedMsg] = useState("");
 
+  // Celle con animazione deviazione: { intended, actual }
+  const [deviationAnim, setDeviationAnim] = useState(null);
+
   useEffect(() => { updateMessage(initialGameState); }, []);
 
   useEffect(() => {
-    const handleGameUpdate = ({ gameState: gs }) => {
+    const handleGameUpdate = ({ gameState: gs, deviated, intendedIndex, actualIndex }) => {
       setGameState(gs);
       updateMessage(gs);
       setSkippedMsg("");
+
+      // Avvia animazione deviazione se la mossa è stata deviata
+      if (deviated) {
+        setDeviationAnim({ intended: intendedIndex, actual: actualIndex });
+        setTimeout(() => setDeviationAnim(null), 700);
+      }
     };
+
     const handleTurnSkipped = ({ skippedPlayerId, gameState: gs }) => {
       setGameState(gs);
       updateMessage(gs);
@@ -78,6 +88,7 @@ export default function Game({ initialGameState, player, onLeave }) {
       setSkippedMsg(msg);
       setTimeout(() => setSkippedMsg(""), 2500);
     };
+
     const handleGameAborted = ({ message: msg }) => setMessage(msg);
     const handleRematchReady = ({ room }) => onLeave("lobby", room);
 
@@ -117,6 +128,10 @@ export default function Game({ initialGameState, player, onLeave }) {
   const iWon = isFinished && gameState.winner === socket.id;
   const isDraw = isFinished && gameState.winner === "draw";
 
+  // Badge modalità attive
+  const hasTimer = gameState.timerSeconds > 0;
+  const hasRandom = gameState.randomChance > 0;
+
   return (
     <div className="game-page">
       <div className="game-header">
@@ -128,6 +143,18 @@ export default function Game({ initialGameState, player, onLeave }) {
             : <span className="symbol-badge o">Sei ◯</span>}
         </div>
       </div>
+
+      {/* Badge modalità attive */}
+      {(hasTimer || hasRandom) && (
+        <div className="mode-badges">
+          {hasTimer && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
+          {hasRandom && (
+            <span className="mode-badge mode-badge-random">
+              🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="scoreboard">
         {gameState.players.map((p) => (
@@ -147,6 +174,12 @@ export default function Game({ initialGameState, player, onLeave }) {
 
       {skippedMsg && <div className="skipped-msg">{skippedMsg}</div>}
 
+      {deviationAnim && (
+        <div className="skipped-msg deviation-msg">
+          🎲 Mossa deviata!
+        </div>
+      )}
+
       <div className={`status-banner ${
         isFinished
           ? (iWon ? "banner-win" : isDraw ? "banner-draw" : "banner-lose")
@@ -160,6 +193,7 @@ export default function Game({ initialGameState, player, onLeave }) {
         winLine={gameState.winLine}
         onCellClick={handleCellClick}
         disabled={!isMyTurn}
+        deviationAnim={deviationAnim}
       />
 
       {isFinished && (

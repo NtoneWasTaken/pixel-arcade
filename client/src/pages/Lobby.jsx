@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Con selezione modalità timer Blitz
+// pages/Lobby.jsx — Timer Blitz + Modalità Random
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
@@ -10,11 +10,19 @@ const TIMER_OPTIONS = [
   { label: "5 secondi", value: 5, icon: "5s" },
 ];
 
+const RANDOM_OPTIONS = [
+  { label: "Disattivato", value: 0, icon: "—" },
+  { label: "Leggero", value: 0.2, icon: "🎲" },
+  { label: "Caotico", value: 0.4, icon: "🎲🎲" },
+  { label: "Anarchia", value: 0.6, icon: "🎲🎲🎲" },
+];
+
 export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
   const [room, setRoom] = useState(initialRoom || { players: [player], code: roomCode });
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
+  const [randomChance, setRandomChance] = useState(0);
 
   useEffect(() => {
     const handlePlayerJoined = ({ room: updatedRoom }) => setRoom(updatedRoom);
@@ -40,7 +48,7 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
   const handleStart = () => {
     setError("");
-    socket.emit("start_game", { timerSeconds });
+    socket.emit("start_game", { timerSeconds, randomChance });
   };
 
   const copyCode = () => {
@@ -93,29 +101,45 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
         </div>
       </div>
 
-      {/* Selezione timer — solo l'host può cambiarla */}
-      {isHost && (
-        <div className="timer-section">
-          <h3 className="section-title">⏱ Modalità Timer</h3>
-          <div className="timer-options">
-            {TIMER_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                className={`timer-option ${timerSeconds === opt.value ? "selected" : ""}`}
-                onClick={() => setTimerSeconds(opt.value)}
-              >
-                <span className="timer-icon">{opt.icon}</span>
-                <span className="timer-label">{opt.label}</span>
-              </button>
-            ))}
+      {isHost ? (
+        <>
+          {/* Selezione Timer */}
+          <div className="timer-section">
+            <h3 className="section-title">⏱ Modalità Timer</h3>
+            <div className="timer-options">
+              {TIMER_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`timer-option ${timerSeconds === opt.value ? "selected" : ""}`}
+                  onClick={() => setTimerSeconds(opt.value)}
+                >
+                  <span className="timer-icon">{opt.icon}</span>
+                  <span className="timer-label">{opt.label}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
 
-      {!isHost && (
+          {/* Selezione Random */}
+          <div className="timer-section">
+            <h3 className="section-title">🎲 Modalità Random</h3>
+            <div className="timer-options">
+              {RANDOM_OPTIONS.map((opt) => (
+                <button
+                  key={opt.value}
+                  className={`timer-option ${randomChance === opt.value ? "selected" : ""}`}
+                  onClick={() => setRandomChance(opt.value)}
+                >
+                  <span className="timer-icon">{opt.icon}</span>
+                  <span className="timer-label">{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </>
+      ) : (
         <div className="timer-section">
-          <h3 className="section-title">⏱ Modalità Timer</h3>
-          <p className="waiting-msg">L&apos;host sceglierà la modalità timer.</p>
+          <p className="waiting-msg">L&apos;host sta configurando la partita…</p>
         </div>
       )}
 

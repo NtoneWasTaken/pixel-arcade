@@ -550,27 +550,22 @@ html, body, #root {
   flex-direction: column;
   gap: 6px;
 }
-
 .timer-bar-labels {
   display: flex;
   justify-content: space-between;
-  align-items: center;
   font-size: 0.72rem;
   letter-spacing: 0.06em;
 }
-
 .timer-bar-who { color: var(--text-dim); }
-
 .timer-bar-seconds {
   font-family: var(--font-display);
   font-size: 0.8rem;
   font-weight: 700;
   transition: color 0.3s;
 }
-.timer-green { color: var(--green); }
+.timer-green  { color: var(--green); }
 .timer-yellow { color: var(--gold); }
-.timer-red { color: var(--red); }
-
+.timer-red    { color: var(--red); }
 .timer-bar-track {
   width: 100%;
   height: 6px;
@@ -579,23 +574,20 @@ html, body, #root {
   overflow: hidden;
   border: 1px solid var(--border);
 }
-
 .timer-bar-fill {
   height: 100%;
   border-radius: 99px;
   transition: width 0.1s linear, background-color 0.3s;
 }
-
 .timer-fill-green  { background: var(--green); box-shadow: 0 0 8px rgba(68,255,136,0.5); }
 .timer-fill-yellow { background: var(--gold);  box-shadow: 0 0 8px rgba(245,197,24,0.5); }
 .timer-fill-red    { background: var(--red);   box-shadow: 0 0 8px rgba(255,68,68,0.5); }
-
-@keyframes timer-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.5; }
-}
+@keyframes timer-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
 .timer-pulse { animation: timer-pulse 0.5s infinite; }
 
+/* ============================================================
+   MESSAGGI TURNO SALTATO / DEVIAZIONE
+   ============================================================ */
 .skipped-msg {
   width: 100%;
   text-align: center;
@@ -607,12 +599,40 @@ html, body, #root {
   background: rgba(245,197,24,0.07);
   animation: fade-in-out 2.5s ease forwards;
 }
-
+.deviation-msg {
+  color: var(--red);
+  border-color: rgba(255,68,68,0.4);
+  background: rgba(255,68,68,0.07);
+}
 @keyframes fade-in-out {
-  0%   { opacity: 0; transform: translateY(-4px); }
-  15%  { opacity: 1; transform: translateY(0); }
-  75%  { opacity: 1; }
-  100% { opacity: 0; }
+  0%   { opacity:0; transform:translateY(-4px); }
+  15%  { opacity:1; transform:translateY(0); }
+  75%  { opacity:1; }
+  100% { opacity:0; }
+}
+
+/* ============================================================
+   ANIMAZIONI CELLE DEVIAZIONE
+   ============================================================ */
+
+/* Cella dove VOLEVI giocare → lampeggia rosso */
+.cell-deviated-intended {
+  animation: flash-intended 0.7s ease forwards;
+}
+@keyframes flash-intended {
+  0%,100% { background: var(--surface); border-color: var(--border); }
+  30%,70% { background: rgba(255,68,68,0.25); border-color: var(--red);
+             box-shadow: inset 0 0 14px rgba(255,68,68,0.3); }
+}
+
+/* Cella dove È FINITA la mossa → lampeggia giallo */
+.cell-deviated-actual {
+  animation: flash-actual 0.7s ease forwards;
+}
+@keyframes flash-actual {
+  0%,100% { background: var(--surface); border-color: var(--border); }
+  30%,70% { background: rgba(245,197,24,0.2); border-color: var(--gold);
+             box-shadow: inset 0 0 14px rgba(245,197,24,0.3); }
 }
 
 /* ============================================================
@@ -624,12 +644,10 @@ html, body, #root {
   flex-direction: column;
   gap: 10px;
 }
-
 .timer-options {
   display: flex;
   gap: 8px;
 }
-
 .timer-option {
   flex: 1;
   display: flex;
@@ -644,27 +662,33 @@ html, body, #root {
   transition: all 0.15s;
   color: var(--text-dim);
 }
-
-.timer-option:hover {
-  border-color: var(--border2);
-  color: var(--text);
-}
-
+.timer-option:hover { border-color: var(--border2); color: var(--text); }
 .timer-option.selected {
   border-color: var(--cyan);
   color: var(--cyan);
   background: rgba(0,212,255,0.07);
   box-shadow: var(--glow-cyan);
 }
+.timer-icon { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; }
+.timer-label { font-size: 0.62rem; letter-spacing: 0.06em; text-align: center; }
 
-.timer-icon {
-  font-family: var(--font-display);
-  font-size: 1.1rem;
-  font-weight: 700;
+/* ============================================================
+   MODE BADGES — in partita
+   ============================================================ */
+.mode-badges {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
 }
-
-.timer-label {
-  font-size: 0.62rem;
-  letter-spacing: 0.06em;
-  text-align: center;
+.mode-badge {
+  font-size: 0.65rem;
+  letter-spacing: 0.08em;
+  padding: 4px 10px;
+  border-radius: 3px;
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+}
+.mode-badge-random {
+  border-color: rgba(245,197,24,0.5);
+  color: var(--gold);
 }
