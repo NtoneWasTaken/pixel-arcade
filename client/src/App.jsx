@@ -1,7 +1,7 @@
 // ============================================================
 // App.jsx — Router principale (state machine: home → lobby → game)
 // ============================================================
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import Home from "./pages/Home";
 import Lobby from "./pages/Lobby";
 import Game from "./pages/Game";
@@ -22,21 +22,21 @@ export default function App() {
   const [gameState, setGameState] = useState(null);
 
   // Home → Lobby
-  const handleRoomJoined = ({ roomCode: code, player: p, isHost, room: r }) => {
+  const handleRoomJoined = useCallback(({ roomCode: code, player: p, isHost, room: r }) => {
     setRoomCode(code);
     setPlayer({ ...p, isHost });
     setRoom(r || { code, players: [p] });
     setScreen(SCREEN.LOBBY);
-  };
+  }, []);
 
   // Lobby → Game
-  const handleGameStart = (gs) => {
+  const handleGameStart = useCallback((gs) => {
     setGameState(gs);
     setScreen(SCREEN.GAME);
-  };
+  }, []);
 
   // Qualsiasi schermata → Home o Lobby
-  const handleLeave = (dest = "home", newRoom = null) => {
+  const handleLeave = useCallback((dest = "home", newRoom = null) => {
     if (dest === "lobby" && newRoom) {
       setRoom(newRoom);
       setGameState(null);
@@ -48,7 +48,7 @@ export default function App() {
       setGameState(null);
       setScreen(SCREEN.HOME);
     }
-  };
+  }, []);
 
   return (
     <div className="app-wrapper">
