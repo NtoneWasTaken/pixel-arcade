@@ -1,7 +1,7 @@
 // ============================================================
 // pages/Home.jsx — Schermata iniziale: crea o entra in stanza
 // ============================================================
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import socket from "../socket/socket";
 
 export default function Home({ onRoomJoined }) {
@@ -11,8 +11,7 @@ export default function Home({ onRoomJoined }) {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Ascolta eventi di risposta dal server
-  useState(() => {
+  useEffect(() => {
     const handleRoomCreated = ({ roomCode, player }) => {
       setLoading(false);
       onRoomJoined({ roomCode, player, isHost: true });
@@ -20,7 +19,7 @@ export default function Home({ onRoomJoined }) {
 
     const handlePlayerJoined = ({ room }) => {
       setLoading(false);
-      const me = room.players[room.players.length - 1]; // ultimo entrato = me
+      const me = room.players[room.players.length - 1];
       onRoomJoined({ roomCode: room.code, player: { ...me, isHost: false }, isHost: false, room });
     };
 
@@ -33,12 +32,13 @@ export default function Home({ onRoomJoined }) {
     socket.on("player_joined", handlePlayerJoined);
     socket.on("error", handleError);
 
+    // Pulizia: rimuove i listener quando il componente si smonta
     return () => {
       socket.off("room_created", handleRoomCreated);
       socket.off("player_joined", handlePlayerJoined);
       socket.off("error", handleError);
     };
-  }, []);
+  }, [onRoomJoined]);
 
   const handleCreate = () => {
     if (!playerName.trim()) { setError("Inserisci il tuo nome!"); return; }
