@@ -1,12 +1,12 @@
 // ============================================================
-// server.js — Backend con timer Blitz + modalità Random
+// server.js — Timer + Random + Abilità Speciali
 // ============================================================
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { createRoom, getRoom, deleteRoom, addPlayerToRoom, removePlayerFromRoom } = require("./rooms/roomManager");
-const { handleMove, initGame, skipTurn } = require("./games/tictactoe");
+const { handleMove, initGame, skipTurn, handleAbility } = require("./games/tictactoe");
 
 const app = express();
 const server = http.createServer(app);
@@ -30,24 +30,15 @@ function startTurnTimer(roomCode) {
   clearTurnTimer(roomCode);
   const room = getRoom(roomCode);
   if (!room || !room.gameState || room.gameState.timerSeconds === 0) return;
-
   const ms = room.gameState.timerSeconds * 1000;
   const timeout = setTimeout(() => {
     const r = getRoom(roomCode);
     if (!r || r.gameState?.status !== "playing") return;
-
     const skippedPlayerId = r.gameState.currentTurn;
     skipTurn(r.gameState);
-
-    io.to(roomCode).emit("turn_skipped", {
-      skippedPlayerId,
-      gameState: r.gameState,
-    });
-
-    console.log(`[TIMER] Turno saltato in stanza ${roomCode}`);
+    io.to(roomCode).emit("turn_skipped", { skippedPlayerId, gameState: r.gameState });
     startTurnTimer(roomCode);
   }, ms);
-
   turnTimers.set(roomCode, timeout);
 }
 
@@ -58,9 +49,24 @@ function clearTurnTimer(roomCode) {
   }
 }
 
+// Costruisce la gameState da mandare al client
+// Se c'è una ghostMove, la cella appare come "?" per l'avversario
+function buildClientState(gameState, forPlayerId) {
+  if (!gameState.ghostMove) return gameState;
+
+  const { index, playerId } = gameState.ghostMove;
+  // Se sei il proprietario della mossa fantasma, vedi normalmente
+  if (forPlayerId === playerId) return gameState;
+
+  // Altrimenti la cella mostra "?"
+  const maskedBoard = [...gameState.board];
+  maskedBoard[index] = "?";
+  return { ...gameState, board: maskedBoard };
+}
+
 // ============================================================
 io.on("connection", (socket) => {
-  console.log(`[+] Client connesso: ${socket.id}`);
+  console.log(`[+] Connesso: ${socket.id}`);
 
   socket.on("create_room", ({ playerName }) => {
     const player = { id: socket.id, name: playerName || "Guest", isHost: true };
@@ -86,26 +92,30 @@ io.on("connection", (socket) => {
     io.to(code).emit("player_joined", { room: getRoom(code) });
   });
 
-  // start_game — ora riceve timerSeconds e randomChance
-  socket.on("start_game", ({ timerSeconds = 0, randomChance = 0 } = {}) => {
+  // start_game — timerSeconds + randomChance + abilitiesEnabled
+  socket.on("start_game", ({ timerSeconds = 0, randomChance = 0, abilitiesEnabled = false } = {}) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
     if (!room) return;
     if (room.players[0].id !== socket.id) {
-      socket.emit("error", { message: "Solo l'host può avviare la partita." });
-      return;
+      socket.emit("error", { message: "Solo l'host può avviare la partita." }); return;
     }
     if (room.players.length < 2) {
-      socket.emit("error", { message: "Servono 2 giocatori per iniziare." });
-      return;
+      socket.emit("error", { message: "Servono 2 giocatori." }); return;
     }
 
     room.status = "playing";
-    room.gameState = initGame(room.players, timerSeconds, randomChance);
+    room.gameState = initGame(room.players, timerSeconds, randomChance, abilitiesEnabled);
 
-    io.to(code).emit("game_started", { gameState: room.gameState });
-    console.log(`[GAME] Avviata in ${code} — timer: ${timerSeconds}s, random: ${randomChance * 100}%`);
+    // Invia a ciascun giocatore la sua versione della gameState
+    room.players.forEach((p) => {
+      const clientSocket = io.sockets.sockets.get(p.id);
+      if (clientSocket) {
+        clientSocket.emit("game_started", { gameState: buildClientState(room.gameState, p.id) });
+      }
+    });
 
+    console.log(`[GAME] Avviata in ${code} — timer:${timerSeconds}s random:${randomChance} abilità:${abilitiesEnabled}`);
     if (timerSeconds > 0) startTurnTimer(code);
   });
 
@@ -115,25 +125,62 @@ io.on("connection", (socket) => {
     if (!room || room.status !== "playing") return;
 
     const result = handleMove(room.gameState, socket.id, index);
-
-    if (result.error) {
-      socket.emit("error", { message: result.error });
-      return;
-    }
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
 
     clearTurnTimer(code);
 
-    // Invia l'aggiornamento con info sulla deviazione
-    io.to(code).emit("game_update", {
-      gameState: room.gameState,
-      deviated: result.deviated,
-      intendedIndex: result.intendedIndex,
-      actualIndex: result.actualIndex,
+    // Invia stato personalizzato a ciascun giocatore
+    room.players.forEach((p) => {
+      const clientSocket = io.sockets.sockets.get(p.id);
+      if (clientSocket) {
+        clientSocket.emit("game_update", {
+          gameState: buildClientState(room.gameState, p.id),
+          deviated: result.deviated,
+          intendedIndex: result.intendedIndex,
+          actualIndex: result.actualIndex,
+        });
+      }
     });
 
     if (room.gameState.status === "finished") {
       room.status = "finished";
-      clearTurnTimer(code);
+    } else if (room.gameState.timerSeconds > 0) {
+      startTurnTimer(code);
+    }
+  });
+
+  // ----------------------------------------------------------
+  // use_ability — Il client usa un'abilità speciale
+  // Payload: { abilityName: "scambia"|"bomba"|"fantasma", targetIndex?, index? }
+  // ----------------------------------------------------------
+  socket.on("use_ability", ({ abilityName, targetIndex, index }) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room || room.status !== "playing") return;
+
+    const payload = { targetIndex, index };
+    const result = handleAbility(room.gameState, socket.id, abilityName, payload);
+
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
+
+    clearTurnTimer(code);
+
+    // Notifica tutti con stato personalizzato
+    room.players.forEach((p) => {
+      const clientSocket = io.sockets.sockets.get(p.id);
+      if (clientSocket) {
+        clientSocket.emit("ability_used", {
+          playerId: socket.id,
+          abilityName,
+          gameState: buildClientState(room.gameState, p.id),
+        });
+      }
+    });
+
+    console.log(`[ABILITY] ${socket.id} ha usato ${abilityName} in stanza ${code}`);
+
+    if (room.gameState.status === "finished") {
+      room.status = "finished";
     } else if (room.gameState.timerSeconds > 0) {
       startTurnTimer(code);
     }
@@ -172,9 +219,9 @@ io.on("connection", (socket) => {
         }
       }
     }
-    console.log(`[-] Client disconnesso: ${socket.id}`);
+    console.log(`[-] Disconnesso: ${socket.id}`);
   });
 });
 
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => console.log(`🎮 Server in ascolto su porta ${PORT}`));
+server.listen(PORT, () => console.log(`🎮 Server su porta ${PORT}`));

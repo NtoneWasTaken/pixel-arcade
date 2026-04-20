@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Timer Blitz + Modalità Random
+// pages/Lobby.jsx — Timer + Random + Abilità Speciali
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
@@ -23,14 +23,12 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
   const [copied, setCopied] = useState(false);
   const [timerSeconds, setTimerSeconds] = useState(0);
   const [randomChance, setRandomChance] = useState(0);
+  const [abilitiesEnabled, setAbilitiesEnabled] = useState(false);
 
   useEffect(() => {
-    const handlePlayerJoined = ({ room: updatedRoom }) => setRoom(updatedRoom);
+    const handlePlayerJoined = ({ room: r }) => setRoom(r);
     const handleGameStarted = ({ gameState }) => onGameStart(gameState);
-    const handlePlayerLeft = ({ room: updatedRoom, message }) => {
-      setRoom(updatedRoom);
-      setError(message);
-    };
+    const handlePlayerLeft = ({ room: r, message }) => { setRoom(r); setError(message); };
     const handleError = ({ message }) => setError(message);
 
     socket.on("player_joined", handlePlayerJoined);
@@ -48,7 +46,7 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
   const handleStart = () => {
     setError("");
-    socket.emit("start_game", { timerSeconds, randomChance });
+    socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled });
   };
 
   const copyCode = () => {
@@ -103,16 +101,14 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
       {isHost ? (
         <>
-          {/* Selezione Timer */}
+          {/* Timer */}
           <div className="timer-section">
             <h3 className="section-title">⏱ Modalità Timer</h3>
             <div className="timer-options">
               {TIMER_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
+                <button key={opt.value}
                   className={`timer-option ${timerSeconds === opt.value ? "selected" : ""}`}
-                  onClick={() => setTimerSeconds(opt.value)}
-                >
+                  onClick={() => setTimerSeconds(opt.value)}>
                   <span className="timer-icon">{opt.icon}</span>
                   <span className="timer-label">{opt.label}</span>
                 </button>
@@ -120,21 +116,41 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
             </div>
           </div>
 
-          {/* Selezione Random */}
+          {/* Random */}
           <div className="timer-section">
             <h3 className="section-title">🎲 Modalità Random</h3>
             <div className="timer-options">
               {RANDOM_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
+                <button key={opt.value}
                   className={`timer-option ${randomChance === opt.value ? "selected" : ""}`}
-                  onClick={() => setRandomChance(opt.value)}
-                >
+                  onClick={() => setRandomChance(opt.value)}>
                   <span className="timer-icon">{opt.icon}</span>
                   <span className="timer-label">{opt.label}</span>
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* Abilità Speciali */}
+          <div className="timer-section">
+            <h3 className="section-title">⚡ Abilità Speciali</h3>
+            <div className="abilities-preview">
+              <div className="ability-preview-item">
+                <span>🔄</span><span>Scambia</span>
+              </div>
+              <div className="ability-preview-item">
+                <span>💣</span><span>Bomba</span>
+              </div>
+              <div className="ability-preview-item">
+                <span>👁️</span><span>Fantasma</span>
+              </div>
+            </div>
+            <button
+              className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`}
+              onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
+            >
+              {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
+            </button>
           </div>
         </>
       ) : (

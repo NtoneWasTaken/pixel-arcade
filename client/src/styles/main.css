@@ -542,153 +542,178 @@ html, body, #root {
 }
 
 /* ============================================================
-   TIMER BAR — Modalità Blitz
+   TIMER BAR
    ============================================================ */
-.timer-bar-wrapper {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-.timer-bar-labels {
-  display: flex;
-  justify-content: space-between;
-  font-size: 0.72rem;
-  letter-spacing: 0.06em;
-}
-.timer-bar-who { color: var(--text-dim); }
-.timer-bar-seconds {
-  font-family: var(--font-display);
-  font-size: 0.8rem;
-  font-weight: 700;
-  transition: color 0.3s;
-}
-.timer-green  { color: var(--green); }
-.timer-yellow { color: var(--gold); }
-.timer-red    { color: var(--red); }
-.timer-bar-track {
-  width: 100%;
-  height: 6px;
-  background: var(--surface2);
-  border-radius: 99px;
-  overflow: hidden;
-  border: 1px solid var(--border);
-}
-.timer-bar-fill {
-  height: 100%;
-  border-radius: 99px;
-  transition: width 0.1s linear, background-color 0.3s;
-}
-.timer-fill-green  { background: var(--green); box-shadow: 0 0 8px rgba(68,255,136,0.5); }
-.timer-fill-yellow { background: var(--gold);  box-shadow: 0 0 8px rgba(245,197,24,0.5); }
-.timer-fill-red    { background: var(--red);   box-shadow: 0 0 8px rgba(255,68,68,0.5); }
+.timer-bar-wrapper { width:100%; display:flex; flex-direction:column; gap:6px; }
+.timer-bar-labels { display:flex; justify-content:space-between; font-size:0.72rem; letter-spacing:0.06em; }
+.timer-bar-who { color:var(--text-dim); }
+.timer-bar-seconds { font-family:var(--font-display); font-size:0.8rem; font-weight:700; transition:color 0.3s; }
+.timer-green  { color:var(--green); }
+.timer-yellow { color:var(--gold); }
+.timer-red    { color:var(--red); }
+.timer-bar-track { width:100%; height:6px; background:var(--surface2); border-radius:99px; overflow:hidden; border:1px solid var(--border); }
+.timer-bar-fill { height:100%; border-radius:99px; transition:width 0.1s linear, background-color 0.3s; }
+.timer-fill-green  { background:var(--green); box-shadow:0 0 8px rgba(68,255,136,0.5); }
+.timer-fill-yellow { background:var(--gold);  box-shadow:0 0 8px rgba(245,197,24,0.5); }
+.timer-fill-red    { background:var(--red);   box-shadow:0 0 8px rgba(255,68,68,0.5); }
 @keyframes timer-pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-.timer-pulse { animation: timer-pulse 0.5s infinite; }
+.timer-pulse { animation:timer-pulse 0.5s infinite; }
 
 /* ============================================================
-   MESSAGGI TURNO SALTATO / DEVIAZIONE
+   MESSAGGI FLOTTANTI
    ============================================================ */
 .skipped-msg {
-  width: 100%;
-  text-align: center;
-  padding: 8px 16px;
-  border-radius: var(--radius);
-  font-size: 0.8rem;
-  color: var(--gold);
-  border: 1px solid rgba(245,197,24,0.4);
-  background: rgba(245,197,24,0.07);
-  animation: fade-in-out 2.5s ease forwards;
+  width:100%; text-align:center; padding:8px 16px; border-radius:var(--radius);
+  font-size:0.8rem; color:var(--gold);
+  border:1px solid rgba(245,197,24,0.4); background:rgba(245,197,24,0.07);
+  animation:fade-in-out 2.5s ease forwards;
 }
-.deviation-msg {
-  color: var(--red);
-  border-color: rgba(255,68,68,0.4);
-  background: rgba(255,68,68,0.07);
-}
-@keyframes fade-in-out {
-  0%   { opacity:0; transform:translateY(-4px); }
-  15%  { opacity:1; transform:translateY(0); }
-  75%  { opacity:1; }
-  100% { opacity:0; }
-}
+.deviation-msg   { color:var(--red);   border-color:rgba(255,68,68,0.4);   background:rgba(255,68,68,0.07); }
+.notification-msg{ color:var(--cyan);  border-color:rgba(0,212,255,0.4);   background:rgba(0,212,255,0.07); }
+@keyframes fade-in-out { 0%{opacity:0;transform:translateY(-4px)} 15%{opacity:1;transform:translateY(0)} 75%{opacity:1} 100%{opacity:0} }
 
 /* ============================================================
-   ANIMAZIONI CELLE DEVIAZIONE
+   CELLE DEVIAZIONE
    ============================================================ */
+@keyframes flash-intended { 0%,100%{background:var(--surface);border-color:var(--border)} 30%,70%{background:rgba(255,68,68,0.25);border-color:var(--red);box-shadow:inset 0 0 14px rgba(255,68,68,0.3)} }
+@keyframes flash-actual   { 0%,100%{background:var(--surface);border-color:var(--border)} 30%,70%{background:rgba(245,197,24,0.2);border-color:var(--gold);box-shadow:inset 0 0 14px rgba(245,197,24,0.3)} }
+.cell-deviated-intended { animation:flash-intended 0.7s ease forwards; }
+.cell-deviated-actual   { animation:flash-actual   0.7s ease forwards; }
 
-/* Cella dove VOLEVI giocare → lampeggia rosso */
-.cell-deviated-intended {
-  animation: flash-intended 0.7s ease forwards;
+/* ============================================================
+   CELLE ABILITÀ
+   ============================================================ */
+.cell-target-ability {
+  border-color: var(--cyan) !important;
+  background: rgba(0,212,255,0.1) !important;
+  animation: pulse-target 0.8s infinite alternate;
 }
-@keyframes flash-intended {
-  0%,100% { background: var(--surface); border-color: var(--border); }
-  30%,70% { background: rgba(255,68,68,0.25); border-color: var(--red);
-             box-shadow: inset 0 0 14px rgba(255,68,68,0.3); }
+.cell-target-bomb {
+  border-color: var(--red) !important;
+  background: rgba(255,68,68,0.1) !important;
+  animation: pulse-target 0.8s infinite alternate;
+}
+.cell-target-ghost {
+  border-color: var(--gold) !important;
+  background: rgba(245,197,24,0.08) !important;
+  animation: pulse-target 0.8s infinite alternate;
+}
+@keyframes pulse-target { from{box-shadow:none} to{box-shadow:inset 0 0 12px rgba(255,255,255,0.15)} }
+
+/* Cella fantasma */
+.cell-ghost { border-color: rgba(245,197,24,0.4) !important; }
+.symbol-ghost {
+  font-family: var(--font-display);
+  font-size: 2rem;
+  font-weight: 900;
+  color: var(--gold);
+  opacity: 0.6;
+  animation: ghost-pulse 1s infinite alternate;
+}
+@keyframes ghost-pulse { from{opacity:0.4} to{opacity:0.8} }
+
+/* ============================================================
+   PANNELLO ABILITÀ
+   ============================================================ */
+.abilities-panel {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
 }
 
-/* Cella dove È FINITA la mossa → lampeggia giallo */
-.cell-deviated-actual {
-  animation: flash-actual 0.7s ease forwards;
+.ability-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 6px;
+  background: var(--surface2);
+  border: 1.5px solid var(--border2);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s;
+  color: var(--text);
+  max-width: 90px;
 }
-@keyframes flash-actual {
-  0%,100% { background: var(--surface); border-color: var(--border); }
-  30%,70% { background: rgba(245,197,24,0.2); border-color: var(--gold);
-             box-shadow: inset 0 0 14px rgba(245,197,24,0.3); }
+.ability-btn:hover:not(:disabled) { border-color: var(--cyan); box-shadow: var(--glow-cyan); }
+.ability-btn.ability-selecting {
+  border-color: var(--gold);
+  background: rgba(245,197,24,0.1);
+  box-shadow: 0 0 12px rgba(245,197,24,0.4);
+}
+.ability-btn.ability-used {
+  opacity: 0.3;
+  cursor: not-allowed;
+  border-color: var(--border);
+}
+.ability-btn.ability-disabled { opacity: 0.4; cursor: not-allowed; }
+.ability-icon { font-size: 1.3rem; }
+.ability-label { font-size: 0.6rem; letter-spacing: 0.06em; color: var(--text-dim); }
+.ability-uses  { font-family: var(--font-display); font-size: 0.65rem; color: var(--cyan); }
+
+/* abilità avversario nel scoreboard */
+.opp-abilities-left {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  margin-left: 6px;
 }
 
 /* ============================================================
    TIMER SECTION — Lobby
    ============================================================ */
-.timer-section {
-  width: 100%;
+.timer-section { width:100%; display:flex; flex-direction:column; gap:10px; }
+.timer-options { display:flex; gap:8px; }
+.timer-option { flex:1; display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 8px; background:var(--surface2); border:1.5px solid var(--border); border-radius:6px; cursor:pointer; transition:all 0.15s; color:var(--text-dim); }
+.timer-option:hover { border-color:var(--border2); color:var(--text); }
+.timer-option.selected { border-color:var(--cyan); color:var(--cyan); background:rgba(0,212,255,0.07); box-shadow:var(--glow-cyan); }
+.timer-icon { font-family:var(--font-display); font-size:1.1rem; font-weight:700; }
+.timer-label { font-size:0.62rem; letter-spacing:0.06em; text-align:center; }
+
+/* Abilità toggle — Lobby */
+.abilities-preview {
   display: flex;
-  flex-direction: column;
   gap: 10px;
+  justify-content: center;
+  padding: 8px 0;
 }
-.timer-options {
-  display: flex;
-  gap: 8px;
-}
-.timer-option {
-  flex: 1;
+.ability-preview-item {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
-  padding: 12px 8px;
-  background: var(--surface2);
-  border: 1.5px solid var(--border);
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.15s;
+  gap: 3px;
+  font-size: 0.65rem;
   color: var(--text-dim);
 }
-.timer-option:hover { border-color: var(--border2); color: var(--text); }
-.timer-option.selected {
+.ability-preview-item span:first-child { font-size: 1.4rem; }
+
+.ability-toggle {
+  width: 100%;
+  padding: 12px;
+  background: var(--surface2);
+  border: 1.5px dashed var(--border2);
+  border-radius: 6px;
+  color: var(--text-dim);
+  font-family: var(--font-display);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ability-toggle:hover { border-color: var(--cyan); color: var(--text); }
+.ability-toggle.enabled {
+  border-style: solid;
   border-color: var(--cyan);
   color: var(--cyan);
   background: rgba(0,212,255,0.07);
   box-shadow: var(--glow-cyan);
 }
-.timer-icon { font-family: var(--font-display); font-size: 1.1rem; font-weight: 700; }
-.timer-label { font-size: 0.62rem; letter-spacing: 0.06em; text-align: center; }
 
 /* ============================================================
-   MODE BADGES — in partita
+   MODE BADGES
    ============================================================ */
-.mode-badges {
-  display: flex;
-  gap: 8px;
-  justify-content: center;
-}
-.mode-badge {
-  font-size: 0.65rem;
-  letter-spacing: 0.08em;
-  padding: 4px 10px;
-  border-radius: 3px;
-  border: 1px solid var(--border2);
-  color: var(--text-dim);
-}
-.mode-badge-random {
-  border-color: rgba(245,197,24,0.5);
-  color: var(--gold);
-}
+.mode-badges { display:flex; gap:8px; justify-content:center; flex-wrap:wrap; }
+.mode-badge { font-size:0.65rem; letter-spacing:0.08em; padding:4px 10px; border-radius:3px; border:1px solid var(--border2); color:var(--text-dim); }
+.mode-badge-random  { border-color:rgba(245,197,24,0.5); color:var(--gold); }
+.mode-badge-ability { border-color:rgba(0,212,255,0.5);  color:var(--cyan); }

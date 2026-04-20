@@ -1,104 +1,105 @@
 // ============================================================
-// pages/Game.jsx — Timer Blitz + animazioni Modalità Random
+// pages/Game.jsx — Timer + Random + Abilità Speciali
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
 import TicTacToeBoard from "../components/TicTacToeBoard";
 
-// ── TimerBar inline ─────────────────────────────────────────
+// ── TimerBar ─────────────────────────────────────────────────
 function TimerBar({ timerSeconds, turnStartedAt, currentTurn, myId }) {
   const [progress, setProgress] = useState(100);
   const [phase, setPhase] = useState("green");
   const rafRef = useRef(null);
 
   useEffect(() => {
-    if (!timerSeconds || timerSeconds === 0 || !turnStartedAt) {
-      setProgress(100);
-      setPhase("green");
-      return;
-    }
+    if (!timerSeconds || !turnStartedAt) { setProgress(100); setPhase("green"); return; }
     const totalMs = timerSeconds * 1000;
     const tick = () => {
-      const elapsed = Date.now() - turnStartedAt;
-      const remaining = Math.max(0, totalMs - elapsed);
+      const remaining = Math.max(0, totalMs - (Date.now() - turnStartedAt));
       const pct = (remaining / totalMs) * 100;
       setProgress(pct);
-      if (remaining > totalMs * 0.5) setPhase("green");
-      else if (remaining > totalMs * 0.25) setPhase("yellow");
-      else setPhase("red");
+      setPhase(remaining > totalMs * 0.5 ? "green" : remaining > totalMs * 0.25 ? "yellow" : "red");
       if (remaining > 0) rafRef.current = requestAnimationFrame(tick);
     };
     rafRef.current = requestAnimationFrame(tick);
     return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
   }, [timerSeconds, turnStartedAt]);
 
-  if (!timerSeconds || timerSeconds === 0) return null;
-
-  const isMyTurn = currentTurn === myId;
+  if (!timerSeconds) return null;
   return (
     <div className="timer-bar-wrapper">
       <div className="timer-bar-labels">
-        <span className="timer-bar-who">
-          {isMyTurn ? "⚡ Il tuo turno" : "⏳ Turno avversario"}
-        </span>
-        <span className={`timer-bar-seconds timer-${phase}`}>
-          {Math.ceil((progress / 100) * timerSeconds)}s
-        </span>
+        <span className="timer-bar-who">{currentTurn === myId ? "⚡ Il tuo turno" : "⏳ Turno avversario"}</span>
+        <span className={`timer-bar-seconds timer-${phase}`}>{Math.ceil((progress / 100) * timerSeconds)}s</span>
       </div>
       <div className="timer-bar-track">
-        <div
-          className={`timer-bar-fill timer-fill-${phase} ${phase === "red" ? "timer-pulse" : ""}`}
-          style={{ width: `${progress}%` }}
-        />
+        <div className={`timer-bar-fill timer-fill-${phase} ${phase === "red" ? "timer-pulse" : ""}`} style={{ width: `${progress}%` }} />
       </div>
     </div>
   );
 }
 
-// ── Game page ────────────────────────────────────────────────
+// ── AbilityButton ────────────────────────────────────────────
+function AbilityButton({ icon, label, uses, onClick, disabled, selecting }) {
+  return (
+    <button
+      className={`ability-btn ${uses === 0 ? "ability-used" : ""} ${selecting ? "ability-selecting" : ""} ${disabled ? "ability-disabled" : ""}`}
+      onClick={onClick}
+      disabled={uses === 0 || disabled}
+      title={label}
+    >
+      <span className="ability-icon">{icon}</span>
+      <span className="ability-label">{label}</span>
+      <span className="ability-uses">{uses > 0 ? "1× " : "✗"}</span>
+    </button>
+  );
+}
+
+// ── Game page ─────────────────────────────────────────────────
 export default function Game({ initialGameState, player, onLeave }) {
   const [gameState, setGameState] = useState(initialGameState);
   const [message, setMessage] = useState("");
   const [skippedMsg, setSkippedMsg] = useState("");
-
-  // Celle con animazione deviazione: { intended, actual }
   const [deviationAnim, setDeviationAnim] = useState(null);
+  const [notification, setNotification] = useState("");
+
+  // Stato selezione abilità: null | "scambia" | "bomba" | "fantasma"
+  const [selectingAbility, setSelectingAbility] = useState(null);
 
   useEffect(() => { updateMessage(initialGameState); }, []);
 
   useEffect(() => {
     const handleGameUpdate = ({ gameState: gs, deviated, intendedIndex, actualIndex }) => {
-      setGameState(gs);
-      updateMessage(gs);
-      setSkippedMsg("");
-
-      // Avvia animazione deviazione se la mossa è stata deviata
+      setGameState(gs); updateMessage(gs); setSkippedMsg("");
       if (deviated) {
         setDeviationAnim({ intended: intendedIndex, actual: actualIndex });
         setTimeout(() => setDeviationAnim(null), 700);
       }
     };
-
+    const handleAbilityUsed = ({ playerId, abilityName, gameState: gs }) => {
+      setGameState(gs); updateMessage(gs);
+      const names = { scambia: "🔄 Scambia", bomba: "💣 Bomba", fantasma: "👁️ Fantasma" };
+      const who = playerId === socket.id ? "Hai usato" : "L'avversario ha usato";
+      showNotification(`${who} ${names[abilityName]}!`);
+      setSelectingAbility(null);
+    };
     const handleTurnSkipped = ({ skippedPlayerId, gameState: gs }) => {
-      setGameState(gs);
-      updateMessage(gs);
-      const msg = skippedPlayerId === socket.id
-        ? "Hai esaurito il tempo! Turno saltato."
-        : "L'avversario ha esaurito il tempo! Tocca a te.";
-      setSkippedMsg(msg);
+      setGameState(gs); updateMessage(gs);
+      setSkippedMsg(skippedPlayerId === socket.id ? "Hai esaurito il tempo! Turno saltato." : "L'avversario ha esaurito il tempo! Tocca a te.");
       setTimeout(() => setSkippedMsg(""), 2500);
     };
-
     const handleGameAborted = ({ message: msg }) => setMessage(msg);
     const handleRematchReady = ({ room }) => onLeave("lobby", room);
 
     socket.on("game_update", handleGameUpdate);
+    socket.on("ability_used", handleAbilityUsed);
     socket.on("turn_skipped", handleTurnSkipped);
     socket.on("game_aborted", handleGameAborted);
     socket.on("rematch_ready", handleRematchReady);
 
     return () => {
       socket.off("game_update", handleGameUpdate);
+      socket.off("ability_used", handleAbilityUsed);
       socket.off("turn_skipped", handleTurnSkipped);
       socket.off("game_aborted", handleGameAborted);
       socket.off("rematch_ready", handleRematchReady);
@@ -107,20 +108,45 @@ export default function Game({ initialGameState, player, onLeave }) {
 
   function updateMessage(gs) {
     if (gs.status === "finished") {
-      if (gs.winner === "draw") setMessage("Pareggio! Nessuno vince.");
+      if (gs.winner === "draw") setMessage("Pareggio!");
       else if (gs.winner === socket.id) setMessage("🎉 Hai vinto!");
-      else setMessage("Hai perso. Meglio la prossima volta!");
+      else setMessage("Hai perso. Ritenta!");
       return;
     }
-    if (gs.currentTurn === socket.id) setMessage("È il tuo turno!");
-    else {
-      const opp = gs.players.find((p) => p.id !== socket.id);
-      setMessage(`Turno di ${opp?.name || "avversario"}…`);
-    }
+    setMessage(gs.currentTurn === socket.id ? "È il tuo turno!" : `Turno di ${gs.players.find(p => p.id !== socket.id)?.name}…`);
   }
 
-  const handleCellClick = (index) => socket.emit("player_move", { index });
-  const handleRematch = () => socket.emit("request_rematch");
+  function showNotification(msg) {
+    setNotification(msg);
+    setTimeout(() => setNotification(""), 2500);
+  }
+
+  // Click su cella — gestisce sia mossa normale che selezione abilità
+  const handleCellClick = (index) => {
+    if (selectingAbility === "scambia" || selectingAbility === "bomba") {
+      socket.emit("use_ability", { abilityName: selectingAbility, targetIndex: index });
+      setSelectingAbility(null);
+    } else if (selectingAbility === "fantasma") {
+      socket.emit("use_ability", { abilityName: "fantasma", index });
+      setSelectingAbility(null);
+    } else {
+      socket.emit("player_move", { index });
+    }
+  };
+
+  const handleAbilityClick = (abilityName) => {
+    if (selectingAbility === abilityName) {
+      setSelectingAbility(null); // deseleziona
+    } else {
+      setSelectingAbility(abilityName);
+      const hints = {
+        scambia: "🔄 Clicca una cella dell'avversario da convertire",
+        bomba:   "💣 Clicca una cella dell'avversario da rimuovere",
+        fantasma:"👁️ Clicca una cella vuota per la mossa nascosta",
+      };
+      showNotification(hints[abilityName]);
+    }
+  };
 
   const myPlayer = gameState.players.find((p) => p.id === socket.id);
   const isMyTurn = gameState.currentTurn === socket.id && gameState.status === "playing";
@@ -128,7 +154,11 @@ export default function Game({ initialGameState, player, onLeave }) {
   const iWon = isFinished && gameState.winner === socket.id;
   const isDraw = isFinished && gameState.winner === "draw";
 
-  // Badge modalità attive
+  const myAbilities = gameState.abilitiesEnabled ? (gameState.abilities?.[socket.id] || {}) : null;
+  const oppAbilities = gameState.abilitiesEnabled
+    ? (gameState.abilities?.[gameState.players.find(p => p.id !== socket.id)?.id] || {})
+    : null;
+
   const hasTimer = gameState.timerSeconds > 0;
   const hasRandom = gameState.randomChance > 0;
 
@@ -138,21 +168,17 @@ export default function Game({ initialGameState, player, onLeave }) {
         <button className="btn btn-ghost btn-sm" onClick={() => onLeave("home")}>✕ Abbandona</button>
         <h2 className="game-title">TIC TAC TOE</h2>
         <div className="my-symbol">
-          {myPlayer?.symbol === "X"
-            ? <span className="symbol-badge x">Sei ✕</span>
-            : <span className="symbol-badge o">Sei ◯</span>}
+          <span className={`symbol-badge ${myPlayer?.symbol === "X" ? "x" : "o"}`}>
+            Sei {myPlayer?.symbol === "X" ? "✕" : "◯"}
+          </span>
         </div>
       </div>
 
-      {/* Badge modalità attive */}
-      {(hasTimer || hasRandom) && (
+      {(hasTimer || hasRandom || gameState.abilitiesEnabled) && (
         <div className="mode-badges">
           {hasTimer && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
-          {hasRandom && (
-            <span className="mode-badge mode-badge-random">
-              🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}
-            </span>
-          )}
+          {hasRandom && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
+          {gameState.abilitiesEnabled && <span className="mode-badge mode-badge-ability">⚡ Abilità</span>}
         </div>
       )}
 
@@ -161,44 +187,54 @@ export default function Game({ initialGameState, player, onLeave }) {
           <div key={p.id} className={`score-player ${gameState.currentTurn === p.id && !isFinished ? "active-turn" : ""}`}>
             <span className="score-symbol">{p.symbol === "X" ? "✕" : "◯"}</span>
             <span className="score-name">{p.id === socket.id ? "Tu" : p.name}</span>
+            {oppAbilities && p.id !== socket.id && (
+              <span className="opp-abilities-left">
+                {Object.values(gameState.abilities[p.id] || {}).filter(v => v > 0).length}⚡
+              </span>
+            )}
           </div>
         ))}
       </div>
 
-      <TimerBar
-        timerSeconds={gameState.timerSeconds}
-        turnStartedAt={gameState.turnStartedAt}
-        currentTurn={gameState.currentTurn}
-        myId={socket.id}
-      />
+      <TimerBar timerSeconds={gameState.timerSeconds} turnStartedAt={gameState.turnStartedAt} currentTurn={gameState.currentTurn} myId={socket.id} />
 
+      {notification && <div className="skipped-msg notification-msg">{notification}</div>}
       {skippedMsg && <div className="skipped-msg">{skippedMsg}</div>}
+      {deviationAnim && <div className="skipped-msg deviation-msg">🎲 Mossa deviata!</div>}
 
-      {deviationAnim && (
-        <div className="skipped-msg deviation-msg">
-          🎲 Mossa deviata!
+      <div className={`status-banner ${isFinished ? (iWon ? "banner-win" : isDraw ? "banner-draw" : "banner-lose") : isMyTurn ? "banner-your-turn" : "banner-wait"}`}>
+        {selectingAbility ? `Seleziona una cella…` : message}
+      </div>
+
+      {/* Pannello abilità — visibile solo se abilità attive */}
+      {myAbilities && isMyTurn && !isFinished && (
+        <div className="abilities-panel">
+          <AbilityButton icon="🔄" label="Scambia" uses={myAbilities.scambia ?? 1}
+            onClick={() => handleAbilityClick("scambia")}
+            selecting={selectingAbility === "scambia"} disabled={!isMyTurn} />
+          <AbilityButton icon="💣" label="Bomba" uses={myAbilities.bomba ?? 1}
+            onClick={() => handleAbilityClick("bomba")}
+            selecting={selectingAbility === "bomba"} disabled={!isMyTurn} />
+          <AbilityButton icon="👁️" label="Fantasma" uses={myAbilities.fantasma ?? 1}
+            onClick={() => handleAbilityClick("fantasma")}
+            selecting={selectingAbility === "fantasma"} disabled={!isMyTurn} />
         </div>
       )}
-
-      <div className={`status-banner ${
-        isFinished
-          ? (iWon ? "banner-win" : isDraw ? "banner-draw" : "banner-lose")
-          : isMyTurn ? "banner-your-turn" : "banner-wait"
-      }`}>
-        {message}
-      </div>
 
       <TicTacToeBoard
         board={gameState.board}
         winLine={gameState.winLine}
         onCellClick={handleCellClick}
-        disabled={!isMyTurn}
+        disabled={!isMyTurn && !selectingAbility}
         deviationAnim={deviationAnim}
+        selectingAbility={selectingAbility}
+        gameState={gameState}
+        myId={socket.id}
       />
 
       {isFinished && (
         <div className="game-over-actions">
-          <button className="btn btn-primary" onClick={handleRematch}>↺ Rivincita</button>
+          <button className="btn btn-primary" onClick={() => socket.emit("request_rematch")}>↺ Rivincita</button>
           <button className="btn btn-ghost" onClick={() => onLeave("home")}>⌂ Home</button>
         </div>
       )}
