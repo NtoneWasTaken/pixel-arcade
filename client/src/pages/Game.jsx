@@ -1,19 +1,67 @@
 // ============================================================
-// pages/Game.jsx — Con supporto timer Blitz e turno saltato
+// pages/Game.jsx — Con TimerBar incorporata (no import esterno)
 // ============================================================
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
 import TicTacToeBoard from "../components/TicTacToeBoard";
-import TimerBar from "../components/TimerBar";
 
+// ── TimerBar inline ─────────────────────────────────────────
+function TimerBar({ timerSeconds, turnStartedAt, currentTurn, myId }) {
+  const [progress, setProgress] = useState(100);
+  const [phase, setPhase] = useState("green");
+  const rafRef = useRef(null);
+
+  useEffect(() => {
+    if (!timerSeconds || timerSeconds === 0 || !turnStartedAt) {
+      setProgress(100);
+      setPhase("green");
+      return;
+    }
+    const totalMs = timerSeconds * 1000;
+    const tick = () => {
+      const elapsed = Date.now() - turnStartedAt;
+      const remaining = Math.max(0, totalMs - elapsed);
+      const pct = (remaining / totalMs) * 100;
+      setProgress(pct);
+      if (remaining > totalMs * 0.5) setPhase("green");
+      else if (remaining > totalMs * 0.25) setPhase("yellow");
+      else setPhase("red");
+      if (remaining > 0) rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => { if (rafRef.current) cancelAnimationFrame(rafRef.current); };
+  }, [timerSeconds, turnStartedAt]);
+
+  if (!timerSeconds || timerSeconds === 0) return null;
+
+  const isMyTurn = currentTurn === myId;
+  return (
+    <div className="timer-bar-wrapper">
+      <div className="timer-bar-labels">
+        <span className="timer-bar-who">
+          {isMyTurn ? "⚡ Il tuo turno" : "⏳ Turno avversario"}
+        </span>
+        <span className={`timer-bar-seconds timer-${phase}`}>
+          {Math.ceil((progress / 100) * timerSeconds)}s
+        </span>
+      </div>
+      <div className="timer-bar-track">
+        <div
+          className={`timer-bar-fill timer-fill-${phase} ${phase === "red" ? "timer-pulse" : ""}`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
+// ── Game page ────────────────────────────────────────────────
 export default function Game({ initialGameState, player, onLeave }) {
   const [gameState, setGameState] = useState(initialGameState);
   const [message, setMessage] = useState("");
   const [skippedMsg, setSkippedMsg] = useState("");
 
-  useEffect(() => {
-    updateMessage(initialGameState);
-  }, []);
+  useEffect(() => { updateMessage(initialGameState); }, []);
 
   useEffect(() => {
     const handleGameUpdate = ({ gameState: gs }) => {
@@ -21,20 +69,16 @@ export default function Game({ initialGameState, player, onLeave }) {
       updateMessage(gs);
       setSkippedMsg("");
     };
-
     const handleTurnSkipped = ({ skippedPlayerId, gameState: gs }) => {
       setGameState(gs);
       updateMessage(gs);
-      const skippedName = skippedPlayerId === socket.id
+      const msg = skippedPlayerId === socket.id
         ? "Hai esaurito il tempo! Turno saltato."
         : "L'avversario ha esaurito il tempo! Tocca a te.";
-      setSkippedMsg(skippedName);
-      // Nascondi il messaggio dopo 2 secondi
+      setSkippedMsg(msg);
       setTimeout(() => setSkippedMsg(""), 2500);
     };
-
     const handleGameAborted = ({ message: msg }) => setMessage(msg);
-
     const handleRematchReady = ({ room }) => onLeave("lobby", room);
 
     socket.on("game_update", handleGameUpdate);
@@ -94,7 +138,6 @@ export default function Game({ initialGameState, player, onLeave }) {
         ))}
       </div>
 
-      {/* Barra timer — visibile solo se timerSeconds > 0 */}
       <TimerBar
         timerSeconds={gameState.timerSeconds}
         turnStartedAt={gameState.turnStartedAt}
@@ -102,10 +145,7 @@ export default function Game({ initialGameState, player, onLeave }) {
         myId={socket.id}
       />
 
-      {/* Messaggio turno saltato */}
-      {skippedMsg && (
-        <div className="skipped-msg">{skippedMsg}</div>
-      )}
+      {skippedMsg && <div className="skipped-msg">{skippedMsg}</div>}
 
       <div className={`status-banner ${
         isFinished
