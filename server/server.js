@@ -1,12 +1,12 @@
 // ============================================================
-// server.js — Timer + Random + Abilità Speciali + Punteggio
+// server.js — Timer + Random + Abilità Speciali + Punteggio + Bot
 // ============================================================
 const express = require("express");
 const http = require("http");
 const { Server } = require("socket.io");
 const cors = require("cors");
 const { createRoom, getRoom, deleteRoom, addPlayerToRoom, removePlayerFromRoom } = require("./rooms/roomManager");
-const { handleMove, initGame, skipTurn, handleAbility } = require("./games/tictactoe");
+const { handleMove, initGame, skipTurn, handleAbility, getBotMove } = require("./games/tictactoe");
 
 const app = express();
 const server = http.createServer(app);
@@ -37,7 +37,12 @@ function startTurnTimer(roomCode) {
     const skippedPlayerId = r.gameState.currentTurn;
     skipTurn(r.gameState);
     io.to(roomCode).emit("turn_skipped", { skippedPlayerId, gameState: r.gameState });
-    startTurnTimer(roomCode);
+    // Se dopo lo skip tocca al bot, fai muovere il bot
+    if (r.botId && r.gameState.currentTurn === r.botId && r.gameState.status === "playing") {
+      scheduleBotMove(roomCode);
+    } else {
+      startTurnTimer(roomCode);
+    }
   }, ms);
   turnTimers.set(roomCode, timeout);
 }
@@ -49,34 +54,64 @@ function clearTurnTimer(roomCode) {
   }
 }
 
-// Costruisce la gameState da mandare al client
-// Se c'è una ghostMove, la cella appare come "?" per l'avversario
 function buildClientState(gameState, forPlayerId) {
   if (!gameState.ghostMove) return gameState;
-
   const { index, playerId } = gameState.ghostMove;
-  // Se sei il proprietario della mossa fantasma, vedi normalmente
   if (forPlayerId === playerId) return gameState;
-
-  // Altrimenti la cella mostra "?"
   const maskedBoard = [...gameState.board];
   maskedBoard[index] = "?";
   return { ...gameState, board: maskedBoard };
 }
 
-// Aggiorna lo score della stanza a fine partita e lo inietta nel gameState
 function updateScore(room) {
   const winner = room.gameState?.winner;
   if (!winner || winner === "draw") return;
-
-  // Inizializza se primo accesso
   if (!(winner in room.score)) room.score[winner] = 0;
   room.score[winner]++;
 }
 
-// Inietta lo score nel gameState prima di inviarlo al client
 function injectScore(gameState, room) {
   return { ...gameState, score: room.score };
+}
+
+// ── Bot helpers ──────────────────────────────────────────────
+
+// Esegue la mossa del bot dopo un ritardo finto (400ms)
+function scheduleBotMove(roomCode) {
+  setTimeout(() => {
+    const room = getRoom(roomCode);
+    if (!room || !room.botId || room.gameState?.status !== "playing") return;
+    if (room.gameState.currentTurn !== room.botId) return;
+
+    const botPlayer = room.gameState.players.find(p => p.id === room.botId);
+    const moveIndex = getBotMove(room.gameState.board, room.botDifficulty, botPlayer.symbol);
+    if (moveIndex === null) return;
+
+    const result = handleMove(room.gameState, room.botId, moveIndex);
+    if (result.error) return;
+
+    clearTurnTimer(roomCode);
+
+    if (room.gameState.status === "finished") {
+      updateScore(room);
+      room.status = "finished";
+    }
+
+    // Invia aggiornamento al giocatore umano
+    const humanSocket = io.sockets.sockets.get(room.humanId);
+    if (humanSocket) {
+      humanSocket.emit("game_update", {
+        gameState: injectScore(buildClientState(room.gameState, room.humanId), room),
+        deviated: result.deviated,
+        intendedIndex: result.intendedIndex,
+        actualIndex: result.actualIndex,
+      });
+    }
+
+    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
+      startTurnTimer(roomCode);
+    }
+  }, 400);
 }
 
 // ============================================================
@@ -86,7 +121,6 @@ io.on("connection", (socket) => {
   socket.on("create_room", ({ playerName }) => {
     const player = { id: socket.id, name: playerName || "Guest", isHost: true };
     const room = createRoom(player);
-    // Inizializza score per l'host
     room.score[socket.id] = 0;
     socket.join(room.code);
     socket.data.roomCode = room.code;
@@ -103,7 +137,6 @@ io.on("connection", (socket) => {
 
     const player = { id: socket.id, name: playerName || "Guest", isHost: false };
     addPlayerToRoom(code, player);
-    // Inizializza score per il secondo giocatore
     room.score[socket.id] = 0;
     socket.join(code);
     socket.data.roomCode = code;
@@ -111,7 +144,44 @@ io.on("connection", (socket) => {
     io.to(code).emit("player_joined", { room: getRoom(code) });
   });
 
-  // start_game — timerSeconds + randomChance + abilitiesEnabled
+  // ── Crea stanza bot ────────────────────────────────────────
+  socket.on("create_bot_room", ({ playerName, difficulty = "easy", timerSeconds = 0, randomChance = 0, abilitiesEnabled = false }) => {
+    const BOT_ID = `bot_${Date.now()}`;
+    const human = { id: socket.id, name: playerName || "Guest", isHost: true };
+    const bot   = { id: BOT_ID, name: "🤖 Bot", isHost: false };
+
+    const room = createRoom(human);
+    room.score[socket.id] = 0;
+    room.score[BOT_ID] = 0;
+    room.botId = BOT_ID;
+    room.humanId = socket.id;
+    room.botDifficulty = difficulty;
+    room.isBot = true;
+
+    addPlayerToRoom(room.code, bot);
+
+    socket.join(room.code);
+    socket.data.roomCode = room.code;
+    socket.data.playerName = human.name;
+
+    room.status = "playing";
+    room.gameState = initGame([human, bot], timerSeconds, randomChance, abilitiesEnabled);
+
+    socket.emit("game_started", {
+      gameState: injectScore(room.gameState, room),
+      isBot: true,
+      botDifficulty: difficulty,
+    });
+
+    console.log(`[BOT] Partita vs bot avviata in ${room.code} — difficoltà: ${difficulty}`);
+
+    if (room.gameState.currentTurn === BOT_ID) {
+      scheduleBotMove(room.code);
+    } else if (timerSeconds > 0) {
+      startTurnTimer(room.code);
+    }
+  });
+
   socket.on("start_game", ({ timerSeconds = 0, randomChance = 0, abilitiesEnabled = false } = {}) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
@@ -126,7 +196,6 @@ io.on("connection", (socket) => {
     room.status = "playing";
     room.gameState = initGame(room.players, timerSeconds, randomChance, abilitiesEnabled);
 
-    // Invia a ciascun giocatore la sua versione della gameState (con score iniettato)
     room.players.forEach((p) => {
       const clientSocket = io.sockets.sockets.get(p.id);
       if (clientSocket) {
@@ -150,33 +219,41 @@ io.on("connection", (socket) => {
 
     clearTurnTimer(code);
 
-    // Aggiorna score se la partita è finita
     if (room.gameState.status === "finished") {
       updateScore(room);
       room.status = "finished";
     }
 
-    // Invia stato personalizzato a ciascun giocatore (con score iniettato)
-    room.players.forEach((p) => {
-      const clientSocket = io.sockets.sockets.get(p.id);
-      if (clientSocket) {
-        clientSocket.emit("game_update", {
-          gameState: injectScore(buildClientState(room.gameState, p.id), room),
-          deviated: result.deviated,
-          intendedIndex: result.intendedIndex,
-          actualIndex: result.actualIndex,
-        });
-      }
-    });
+    if (room.isBot) {
+      socket.emit("game_update", {
+        gameState: injectScore(room.gameState, room),
+        deviated: result.deviated,
+        intendedIndex: result.intendedIndex,
+        actualIndex: result.actualIndex,
+      });
+    } else {
+      room.players.forEach((p) => {
+        const clientSocket = io.sockets.sockets.get(p.id);
+        if (clientSocket) {
+          clientSocket.emit("game_update", {
+            gameState: injectScore(buildClientState(room.gameState, p.id), room),
+            deviated: result.deviated,
+            intendedIndex: result.intendedIndex,
+            actualIndex: result.actualIndex,
+          });
+        }
+      });
+    }
 
-    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
+    if (room.gameState.status === "finished") return;
+
+    if (room.isBot && room.gameState.currentTurn === room.botId) {
+      scheduleBotMove(code);
+    } else if (room.gameState.timerSeconds > 0) {
       startTurnTimer(code);
     }
   });
 
-  // ----------------------------------------------------------
-  // use_ability — Il client usa un'abilità speciale
-  // ----------------------------------------------------------
   socket.on("use_ability", ({ abilityName, targetIndex, index }) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
@@ -189,27 +266,37 @@ io.on("connection", (socket) => {
 
     clearTurnTimer(code);
 
-    // Aggiorna score se la partita è finita (es. Scambia che completa una linea)
     if (room.gameState.status === "finished") {
       updateScore(room);
       room.status = "finished";
     }
 
-    // Notifica tutti con stato personalizzato (con score iniettato)
-    room.players.forEach((p) => {
-      const clientSocket = io.sockets.sockets.get(p.id);
-      if (clientSocket) {
-        clientSocket.emit("ability_used", {
-          playerId: socket.id,
-          abilityName,
-          gameState: injectScore(buildClientState(room.gameState, p.id), room),
-        });
-      }
-    });
+    if (room.isBot) {
+      socket.emit("ability_used", {
+        playerId: socket.id,
+        abilityName,
+        gameState: injectScore(room.gameState, room),
+      });
+    } else {
+      room.players.forEach((p) => {
+        const clientSocket = io.sockets.sockets.get(p.id);
+        if (clientSocket) {
+          clientSocket.emit("ability_used", {
+            playerId: socket.id,
+            abilityName,
+            gameState: injectScore(buildClientState(room.gameState, p.id), room),
+          });
+        }
+      });
+    }
 
     console.log(`[ABILITY] ${socket.id} ha usato ${abilityName} in stanza ${code}`);
 
-    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
+    if (room.gameState.status === "finished") return;
+
+    if (room.isBot && room.gameState.currentTurn === room.botId) {
+      scheduleBotMove(code);
+    } else if (room.gameState.timerSeconds > 0) {
       startTurnTimer(code);
     }
   });
@@ -219,10 +306,30 @@ io.on("connection", (socket) => {
     const room = getRoom(code);
     if (!room) return;
     clearTurnTimer(code);
-    room.status = "waiting";
-    room.gameState = null;
-    // Lo score viene preservato — non viene azzerato
-    io.to(code).emit("rematch_ready", { room });
+
+    if (room.isBot) {
+      const human = room.players.find(p => p.id === room.humanId);
+      const bot   = room.players.find(p => p.id === room.botId);
+      const prevGs = room.gameState;
+      room.status = "playing";
+      room.gameState = initGame([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.abilitiesEnabled);
+
+      socket.emit("game_started", {
+        gameState: injectScore(room.gameState, room),
+        isBot: true,
+        botDifficulty: room.botDifficulty,
+      });
+
+      if (room.gameState.currentTurn === room.botId) {
+        scheduleBotMove(code);
+      } else if (room.gameState.timerSeconds > 0) {
+        startTurnTimer(code);
+      }
+    } else {
+      room.status = "waiting";
+      room.gameState = null;
+      io.to(code).emit("rematch_ready", { room });
+    }
   });
 
   socket.on("disconnect", () => {

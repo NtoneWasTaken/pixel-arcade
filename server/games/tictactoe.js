@@ -1,5 +1,5 @@
 // ============================================================
-// games/tictactoe.js — Logica server + timer + random + abilità
+// games/tictactoe.js — Logica server + timer + random + abilità + bot
 // ============================================================
 
 const WIN_LINES = [
@@ -24,12 +24,10 @@ function initGame(players, timerSeconds = 0, randomChance = 0, abilitiesEnabled 
     turnStartedAt: timerSeconds > 0 ? Date.now() : null,
     randomChance,
     abilitiesEnabled,
-    // Abilità per ogni giocatore: { scambia, bomba, fantasma } — 1 uso ciascuna
     abilities: {
       [players[0].id]: { scambia: 1, bomba: 1, fantasma: 1 },
       [players[1].id]: { scambia: 1, bomba: 1, fantasma: 1 },
     },
-    // Mossa fantasma attiva: { playerId, index, symbol }
     ghostMove: null,
   };
 }
@@ -55,7 +53,6 @@ function handleMove(gameState, playerId, index) {
     }
   }
 
-  // Se c'era una mossa fantasma attiva, rivelala ora
   if (gameState.ghostMove) {
     gameState.board[gameState.ghostMove.index] = gameState.ghostMove.symbol;
     gameState.ghostMove = null;
@@ -87,8 +84,6 @@ function handleMove(gameState, playerId, index) {
 
 // ── ABILITÀ ─────────────────────────────────────────────────
 
-// 🔄 Scambia: sostituisce UN simbolo avversario con il proprio
-// payload: { targetIndex } — indice della cella avversaria
 function useScambia(gameState, playerId, targetIndex) {
   const player = gameState.players.find((p) => p.id === playerId);
   const opponent = gameState.players.find((p) => p.id !== playerId);
@@ -99,7 +94,6 @@ function useScambia(gameState, playerId, targetIndex) {
 
   gameState.board[targetIndex] = player.symbol;
 
-  // Controlla vittoria dopo lo scambio
   const winLine = checkWin(gameState.board, player.symbol);
   if (winLine) {
     gameState.status = "finished";
@@ -110,8 +104,6 @@ function useScambia(gameState, playerId, targetIndex) {
   return {};
 }
 
-// 💣 Bomba: rimuove un simbolo avversario (cella torna null)
-// payload: { targetIndex }
 function useBomba(gameState, playerId, targetIndex) {
   const opponent = gameState.players.find((p) => p.id !== playerId);
 
@@ -125,9 +117,6 @@ function useBomba(gameState, playerId, targetIndex) {
   return {};
 }
 
-// 👁️ Fantasma: la tua prossima mossa è nascosta per 1 turno
-// Non modifica la board subito — segna ghostMove
-// payload: { index } — cella dove vuoi giocare in fantasma
 function useFantasma(gameState, playerId, index) {
   if (gameState.board[index] !== null) {
     return { error: "La cella è già occupata." };
@@ -135,12 +124,8 @@ function useFantasma(gameState, playerId, index) {
 
   const player = gameState.players.find((p) => p.id === playerId);
 
-  // Segna la mossa fantasma — la board mostrata all'avversario avrà "?" in quella cella
   gameState.ghostMove = { playerId, index, symbol: player.symbol };
   gameState.moveCount++;
-
-  // Controlla subito vittoria (non la rivela però)
-  // Il controllo vero avviene quando la mossa viene rivelata al turno successivo
 
   const other = gameState.players.find((p) => p.id !== playerId);
   gameState.currentTurn = other.id;
@@ -149,7 +134,6 @@ function useFantasma(gameState, playerId, index) {
   return {};
 }
 
-// Funzione principale per usare un'abilità
 function handleAbility(gameState, playerId, abilityName, payload) {
   if (!gameState.abilitiesEnabled) return { error: "Abilità disabilitate." };
   if (gameState.status !== "playing") return { error: "La partita è terminata." };
@@ -178,10 +162,8 @@ function handleAbility(gameState, playerId, abilityName, payload) {
 
   if (result.error) return result;
 
-  // Consuma l'abilità
   playerAbilities[abilityName] = 0;
 
-  // Per scambia e bomba, passa il turno
   if (abilityName === "scambia" || abilityName === "bomba") {
     if (gameState.status === "playing") {
       const other = gameState.players.find((p) => p.id !== playerId);
@@ -206,4 +188,72 @@ function checkWin(board, symbol) {
   return null;
 }
 
-module.exports = { initGame, handleMove, handleAbility, skipTurn };
+// ── BOT ─────────────────────────────────────────────────────
+
+// Restituisce l'indice della mossa del bot
+function getBotMove(board, difficulty, botSymbol) {
+  if (difficulty === "easy") {
+    return getBotMoveEasy(board);
+  } else {
+    return getBotMoveHard(board, botSymbol);
+  }
+}
+
+// Facile: cella libera casuale
+function getBotMoveEasy(board) {
+  const free = board.map((c, i) => c === null ? i : null).filter(i => i !== null);
+  if (free.length === 0) return null;
+  return free[Math.floor(Math.random() * free.length)];
+}
+
+// Difficile: minimax — il bot non sbaglia mai
+function getBotMoveHard(board, botSymbol) {
+  const playerSymbol = botSymbol === "X" ? "O" : "X";
+  let bestScore = -Infinity;
+  let bestMove = null;
+
+  for (let i = 0; i < 9; i++) {
+    if (board[i] !== null) continue;
+    board[i] = botSymbol;
+    const score = minimax(board, 0, false, botSymbol, playerSymbol);
+    board[i] = null;
+    if (score > bestScore) {
+      bestScore = score;
+      bestMove = i;
+    }
+  }
+
+  return bestMove;
+}
+
+function minimax(board, depth, isMaximizing, botSymbol, playerSymbol) {
+  const winBot = checkWin(board, botSymbol);
+  const winPlayer = checkWin(board, playerSymbol);
+  const free = board.filter(c => c === null).length;
+
+  if (winBot) return 10 - depth;
+  if (winPlayer) return depth - 10;
+  if (free === 0) return 0;
+
+  if (isMaximizing) {
+    let best = -Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (board[i] !== null) continue;
+      board[i] = botSymbol;
+      best = Math.max(best, minimax(board, depth + 1, false, botSymbol, playerSymbol));
+      board[i] = null;
+    }
+    return best;
+  } else {
+    let best = Infinity;
+    for (let i = 0; i < 9; i++) {
+      if (board[i] !== null) continue;
+      board[i] = playerSymbol;
+      best = Math.min(best, minimax(board, depth + 1, true, botSymbol, playerSymbol));
+      board[i] = null;
+    }
+    return best;
+  }
+}
+
+module.exports = { initGame, handleMove, handleAbility, skipTurn, getBotMove };

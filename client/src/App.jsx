@@ -1,5 +1,5 @@
 // ============================================================
-// App.jsx — Router principale (state machine: home → lobby → game)
+// App.jsx — Router principale (home → lobby → game | home → bot game)
 // ============================================================
 import { useState, useCallback } from "react";
 import Home from "./pages/Home";
@@ -7,31 +7,40 @@ import Lobby from "./pages/Lobby";
 import Game from "./pages/Game";
 import "./styles/main.css";
 
-// Schermate possibili
 const SCREEN = {
-  HOME: "home",
+  HOME:  "home",
   LOBBY: "lobby",
-  GAME: "game",
+  GAME:  "game",
 };
 
 export default function App() {
-  const [screen, setScreen] = useState(SCREEN.HOME);
-  const [roomCode, setRoomCode] = useState(null);
-  const [player, setPlayer]   = useState(null);
-  const [room, setRoom]       = useState(null);
+  const [screen,    setScreen]    = useState(SCREEN.HOME);
+  const [roomCode,  setRoomCode]  = useState(null);
+  const [player,    setPlayer]    = useState(null);
+  const [room,      setRoom]      = useState(null);
   const [gameState, setGameState] = useState(null);
+  const [isBot,     setIsBot]     = useState(false);
 
-  // Home → Lobby
+  // Home → Lobby (multiplayer)
   const handleRoomJoined = useCallback(({ roomCode: code, player: p, isHost, room: r }) => {
     setRoomCode(code);
     setPlayer({ ...p, isHost });
     setRoom(r || { code, players: [p] });
+    setIsBot(false);
     setScreen(SCREEN.LOBBY);
+  }, []);
+
+  // Home → Game (bot — salta la lobby)
+  const handleBotGame = useCallback(({ gameState: gs }) => {
+    setGameState(gs);
+    setIsBot(true);
+    setScreen(SCREEN.GAME);
   }, []);
 
   // Lobby → Game
   const handleGameStart = useCallback((gs) => {
     setGameState(gs);
+    setIsBot(false);
     setScreen(SCREEN.GAME);
   }, []);
 
@@ -40,12 +49,14 @@ export default function App() {
     if (dest === "lobby" && newRoom) {
       setRoom(newRoom);
       setGameState(null);
+      setIsBot(false);
       setScreen(SCREEN.LOBBY);
     } else {
       setRoomCode(null);
       setPlayer(null);
       setRoom(null);
       setGameState(null);
+      setIsBot(false);
       setScreen(SCREEN.HOME);
     }
   }, []);
@@ -55,7 +66,7 @@ export default function App() {
       <div className="scanlines" aria-hidden="true" />
 
       {screen === SCREEN.HOME && (
-        <Home onRoomJoined={handleRoomJoined} />
+        <Home onRoomJoined={handleRoomJoined} onBotGame={handleBotGame} />
       )}
 
       {screen === SCREEN.LOBBY && (
@@ -73,6 +84,7 @@ export default function App() {
           initialGameState={gameState}
           player={player}
           roomCode={roomCode}
+          isBot={isBot}
           onLeave={handleLeave}
         />
       )}

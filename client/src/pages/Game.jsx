@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Game.jsx — Timer + Random + Abilità Speciali + Punteggio
+// pages/Game.jsx — Timer + Random + Abilità + Punteggio + Bot
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -56,21 +56,19 @@ function AbilityButton({ icon, label, uses, onClick, disabled, selecting }) {
 }
 
 // ── ScoreDisplay ─────────────────────────────────────────────
-// Mostra punteggio a sinistra (tu, blu) e destra (avversario, rosso)
 function ScoreDisplay({ gameState, roomCode }) {
   const myId = socket.id;
   const score = gameState.score || {};
 
-  const me = gameState.players.find((p) => p.id === myId);
+  const me  = gameState.players.find((p) => p.id === myId);
   const opp = gameState.players.find((p) => p.id !== myId);
 
-  const myScore = score[myId] ?? 0;
-  const oppScore = score[opp?.id] ?? 0;
+  const myScore  = score[myId]      ?? 0;
+  const oppScore = score[opp?.id]   ?? 0;
 
-  // Traccia i punteggi precedenti per animare quando aumentano
-  const prevMyScore = useRef(myScore);
+  const prevMyScore  = useRef(myScore);
   const prevOppScore = useRef(oppScore);
-  const [myGlow, setMyGlow] = useState(false);
+  const [myGlow,  setMyGlow]  = useState(false);
   const [oppGlow, setOppGlow] = useState(false);
 
   useEffect(() => {
@@ -91,18 +89,13 @@ function ScoreDisplay({ gameState, roomCode }) {
 
   return (
     <div className="score-display">
-      {/* Punteggio mio — sempre a sinistra, blu */}
       <div className={`score-side score-left ${myGlow ? "score-glow-blue" : ""}`}>
         <span className="score-name-small">{me?.name || "Tu"}</span>
         <span className="score-number score-blue">{myScore}</span>
       </div>
-
-      {/* Codice stanza al centro */}
       <div className="score-center">
-        <span className="room-code-label">#{roomCode}</span>
+        <span className="room-code-label">{roomCode ? `#${roomCode}` : "VS"}</span>
       </div>
-
-      {/* Punteggio avversario — sempre a destra, rosso */}
       <div className={`score-side score-right ${oppGlow ? "score-glow-red" : ""}`}>
         <span className="score-name-small">{opp?.name || "Avversario"}</span>
         <span className="score-number score-red">{oppScore}</span>
@@ -112,64 +105,85 @@ function ScoreDisplay({ gameState, roomCode }) {
 }
 
 // ── Game page ─────────────────────────────────────────────────
-export default function Game({ initialGameState, player, roomCode, onLeave }) {
-  const [gameState, setGameState] = useState(initialGameState);
-  const [message, setMessage] = useState("");
-  const [skippedMsg, setSkippedMsg] = useState("");
-  const [deviationAnim, setDeviationAnim] = useState(null);
-  const [notification, setNotification] = useState("");
-
-  // Stato selezione abilità: null | "scambia" | "bomba" | "fantasma"
+export default function Game({ initialGameState, player, roomCode, isBot = false, onLeave }) {
+  const [gameState,      setGameState]      = useState(initialGameState);
+  const [message,        setMessage]        = useState("");
+  const [skippedMsg,     setSkippedMsg]     = useState("");
+  const [deviationAnim,  setDeviationAnim]  = useState(null);
+  const [notification,   setNotification]   = useState("");
+  const [botThinking,    setBotThinking]    = useState(false);
   const [selectingAbility, setSelectingAbility] = useState(null);
 
   useEffect(() => { updateMessage(initialGameState); }, []);
 
   useEffect(() => {
     const handleGameUpdate = ({ gameState: gs, deviated, intendedIndex, actualIndex }) => {
+      setBotThinking(false);
       setGameState(gs); updateMessage(gs); setSkippedMsg("");
       if (deviated) {
         setDeviationAnim({ intended: intendedIndex, actual: actualIndex });
         setTimeout(() => setDeviationAnim(null), 700);
       }
+      // Se tocca al bot dopo l'aggiornamento, mostra "pensa..."
+      if (isBot && gs.status === "playing" && gs.currentTurn !== socket.id) {
+        setBotThinking(true);
+      }
+    };
+    const handleGameStarted = ({ gameState: gs }) => {
+      setGameState(gs); updateMessage(gs); setBotThinking(false);
+      setSelectingAbility(null);
     };
     const handleAbilityUsed = ({ playerId, abilityName, gameState: gs }) => {
+      setBotThinking(false);
       setGameState(gs); updateMessage(gs);
       const names = { scambia: "🔄 Scambia", bomba: "💣 Bomba", fantasma: "👁️ Fantasma" };
       const who = playerId === socket.id ? "Hai usato" : "L'avversario ha usato";
       showNotification(`${who} ${names[abilityName]}!`);
       setSelectingAbility(null);
+      if (isBot && gs.status === "playing" && gs.currentTurn !== socket.id) {
+        setBotThinking(true);
+      }
     };
     const handleTurnSkipped = ({ skippedPlayerId, gameState: gs }) => {
       setGameState(gs); updateMessage(gs);
       setSkippedMsg(skippedPlayerId === socket.id ? "Hai esaurito il tempo! Turno saltato." : "L'avversario ha esaurito il tempo! Tocca a te.");
       setTimeout(() => setSkippedMsg(""), 2500);
+      if (isBot && gs.status === "playing" && gs.currentTurn !== socket.id) {
+        setBotThinking(true);
+      }
     };
     const handleGameAborted = ({ message: msg }) => setMessage(msg);
     const handleRematchReady = ({ room }) => onLeave("lobby", room);
 
-    socket.on("game_update", handleGameUpdate);
-    socket.on("ability_used", handleAbilityUsed);
-    socket.on("turn_skipped", handleTurnSkipped);
-    socket.on("game_aborted", handleGameAborted);
-    socket.on("rematch_ready", handleRematchReady);
+    socket.on("game_update",    handleGameUpdate);
+    socket.on("game_started",   handleGameStarted);
+    socket.on("ability_used",   handleAbilityUsed);
+    socket.on("turn_skipped",   handleTurnSkipped);
+    socket.on("game_aborted",   handleGameAborted);
+    socket.on("rematch_ready",  handleRematchReady);
 
     return () => {
-      socket.off("game_update", handleGameUpdate);
-      socket.off("ability_used", handleAbilityUsed);
-      socket.off("turn_skipped", handleTurnSkipped);
-      socket.off("game_aborted", handleGameAborted);
+      socket.off("game_update",   handleGameUpdate);
+      socket.off("game_started",  handleGameStarted);
+      socket.off("ability_used",  handleAbilityUsed);
+      socket.off("turn_skipped",  handleTurnSkipped);
+      socket.off("game_aborted",  handleGameAborted);
       socket.off("rematch_ready", handleRematchReady);
     };
-  }, [onLeave]);
+  }, [onLeave, isBot]);
 
   function updateMessage(gs) {
     if (gs.status === "finished") {
       if (gs.winner === "draw") setMessage("Pareggio!");
       else if (gs.winner === socket.id) setMessage("🎉 Hai vinto!");
-      else setMessage("Hai perso. Ritenta!");
+      else setMessage(isBot ? "🤖 Il bot ha vinto!" : "Hai perso. Ritenta!");
       return;
     }
-    setMessage(gs.currentTurn === socket.id ? "È il tuo turno!" : `Turno di ${gs.players.find(p => p.id !== socket.id)?.name}…`);
+    if (isBot) {
+      setMessage(gs.currentTurn === socket.id ? "È il tuo turno!" : "🤖 Il bot sta pensando…");
+    } else {
+      setMessage(gs.currentTurn === socket.id ? "È il tuo turno!" : `Turno di ${gs.players.find(p => p.id !== socket.id)?.name}…`);
+    }
   }
 
   function showNotification(msg) {
@@ -177,7 +191,6 @@ export default function Game({ initialGameState, player, roomCode, onLeave }) {
     setTimeout(() => setNotification(""), 2500);
   }
 
-  // Click su cella — gestisce sia mossa normale che selezione abilità
   const handleCellClick = (index) => {
     if (selectingAbility === "scambia" || selectingAbility === "bomba") {
       socket.emit("use_ability", { abilityName: selectingAbility, targetIndex: index });
@@ -204,18 +217,18 @@ export default function Game({ initialGameState, player, roomCode, onLeave }) {
     }
   };
 
-  const myPlayer = gameState.players.find((p) => p.id === socket.id);
-  const isMyTurn = gameState.currentTurn === socket.id && gameState.status === "playing";
+  const myPlayer   = gameState.players.find((p) => p.id === socket.id);
+  const isMyTurn   = gameState.currentTurn === socket.id && gameState.status === "playing";
   const isFinished = gameState.status === "finished";
-  const iWon = isFinished && gameState.winner === socket.id;
-  const isDraw = isFinished && gameState.winner === "draw";
+  const iWon       = isFinished && gameState.winner === socket.id;
+  const isDraw     = isFinished && gameState.winner === "draw";
 
-  const myAbilities = gameState.abilitiesEnabled ? (gameState.abilities?.[socket.id] || {}) : null;
+  const myAbilities  = gameState.abilitiesEnabled ? (gameState.abilities?.[socket.id] || {}) : null;
   const oppAbilities = gameState.abilitiesEnabled
     ? (gameState.abilities?.[gameState.players.find(p => p.id !== socket.id)?.id] || {})
     : null;
 
-  const hasTimer = gameState.timerSeconds > 0;
+  const hasTimer  = gameState.timerSeconds > 0;
   const hasRandom = gameState.randomChance > 0;
 
   return (
@@ -230,13 +243,19 @@ export default function Game({ initialGameState, player, roomCode, onLeave }) {
         </div>
       </div>
 
-      {/* Punteggio con codice stanza al centro */}
+      {/* Punteggio con codice stanza (o "VS" per bot) */}
       <ScoreDisplay gameState={gameState} roomCode={roomCode} />
+
+      {isBot && (
+        <div className="bot-indicator">
+          🤖 Stai giocando contro il Bot
+        </div>
+      )}
 
       {(hasTimer || hasRandom || gameState.abilitiesEnabled) && (
         <div className="mode-badges">
-          {hasTimer && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
-          {hasRandom && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
+          {hasTimer      && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
+          {hasRandom     && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
           {gameState.abilitiesEnabled && <span className="mode-badge mode-badge-ability">⚡ Abilità</span>}
         </div>
       )}
@@ -257,15 +276,14 @@ export default function Game({ initialGameState, player, roomCode, onLeave }) {
 
       <TimerBar timerSeconds={gameState.timerSeconds} turnStartedAt={gameState.turnStartedAt} currentTurn={gameState.currentTurn} myId={socket.id} />
 
-      {notification && <div className="skipped-msg notification-msg">{notification}</div>}
-      {skippedMsg && <div className="skipped-msg">{skippedMsg}</div>}
+      {notification  && <div className="skipped-msg notification-msg">{notification}</div>}
+      {skippedMsg    && <div className="skipped-msg">{skippedMsg}</div>}
       {deviationAnim && <div className="skipped-msg deviation-msg">🎲 Mossa deviata!</div>}
 
       <div className={`status-banner ${isFinished ? (iWon ? "banner-win" : isDraw ? "banner-draw" : "banner-lose") : isMyTurn ? "banner-your-turn" : "banner-wait"}`}>
-        {selectingAbility ? `Seleziona una cella…` : message}
+        {selectingAbility ? "Seleziona una cella…" : message}
       </div>
 
-      {/* Pannello abilità — visibile solo se abilità attive */}
       {myAbilities && isMyTurn && !isFinished && (
         <div className="abilities-panel">
           <AbilityButton icon="🔄" label="Scambia" uses={myAbilities.scambia ?? 1}
@@ -294,7 +312,7 @@ export default function Game({ initialGameState, player, roomCode, onLeave }) {
       {isFinished && (
         <div className="game-over-actions">
           <button className="btn btn-primary" onClick={() => socket.emit("request_rematch")}>↺ Rivincita</button>
-          <button className="btn btn-ghost" onClick={() => onLeave("home")}>⌂ Home</button>
+          <button className="btn btn-ghost"   onClick={() => onLeave("home")}>⌂ Home</button>
         </div>
       )}
     </div>

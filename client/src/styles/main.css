@@ -810,3 +810,58 @@ html, body, #root {
 .score-glow-red .score-number {
   animation: scoreGlowRed 0.9s ease-out forwards;
 }
+
+/* ============================================================
+   BOT — Stili aggiuntivi da aggiungere in fondo a main.css
+   ============================================================ */
+
+/* Pulsante "Gioca vs Bot" in Home */
+.btn-bot {
+  background: linear-gradient(135deg, #7c3aed, #4f46e5);
+  color: #fff;
+  border: none;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  transition: opacity 0.2s, transform 0.15s;
+}
+.btn-bot:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+/* Indicatore bot in Game */
+.bot-indicator {
+  text-align: center;
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: #a78bfa;
+  text-transform: uppercase;
+  margin-bottom: 0.25rem;
+}
+
+/* Sezione opzioni bot in Home */
+.bot-option-group {
+  margin-bottom: 1rem;
+}
+
+.bot-option-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-bottom: 0.4rem;
+}
+
+.bot-difficulty-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.bot-hard-warning {
+  font-size: 0.7rem;
+  color: #f87171;
+  margin-top: 0.4rem;
+  text-align: center;
+}
