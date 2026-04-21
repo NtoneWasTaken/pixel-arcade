@@ -72,6 +72,7 @@ export default function App() {
         <Game
           initialGameState={gameState}
           player={player}
+          roomCode={roomCode}
           onLeave={handleLeave}
         />
       )}

@@ -23,6 +23,7 @@ function createRoom(player) {
     status: "waiting",   // waiting | playing | finished
     players: [player],
     gameState: null,
+    score: {},           // { [playerId]: vittorie } — persiste tra le partite
     createdAt: Date.now(),
   };
   rooms.set(code, room);

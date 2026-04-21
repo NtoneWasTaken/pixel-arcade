@@ -1,5 +1,5 @@
 // ============================================================
-// server.js — Timer + Random + Abilità Speciali
+// server.js — Timer + Random + Abilità Speciali + Punteggio
 // ============================================================
 const express = require("express");
 const http = require("http");
@@ -64,6 +64,21 @@ function buildClientState(gameState, forPlayerId) {
   return { ...gameState, board: maskedBoard };
 }
 
+// Aggiorna lo score della stanza a fine partita e lo inietta nel gameState
+function updateScore(room) {
+  const winner = room.gameState?.winner;
+  if (!winner || winner === "draw") return;
+
+  // Inizializza se primo accesso
+  if (!(winner in room.score)) room.score[winner] = 0;
+  room.score[winner]++;
+}
+
+// Inietta lo score nel gameState prima di inviarlo al client
+function injectScore(gameState, room) {
+  return { ...gameState, score: room.score };
+}
+
 // ============================================================
 io.on("connection", (socket) => {
   console.log(`[+] Connesso: ${socket.id}`);
@@ -71,6 +86,8 @@ io.on("connection", (socket) => {
   socket.on("create_room", ({ playerName }) => {
     const player = { id: socket.id, name: playerName || "Guest", isHost: true };
     const room = createRoom(player);
+    // Inizializza score per l'host
+    room.score[socket.id] = 0;
     socket.join(room.code);
     socket.data.roomCode = room.code;
     socket.data.playerName = player.name;
@@ -86,6 +103,8 @@ io.on("connection", (socket) => {
 
     const player = { id: socket.id, name: playerName || "Guest", isHost: false };
     addPlayerToRoom(code, player);
+    // Inizializza score per il secondo giocatore
+    room.score[socket.id] = 0;
     socket.join(code);
     socket.data.roomCode = code;
     socket.data.playerName = player.name;
@@ -107,11 +126,13 @@ io.on("connection", (socket) => {
     room.status = "playing";
     room.gameState = initGame(room.players, timerSeconds, randomChance, abilitiesEnabled);
 
-    // Invia a ciascun giocatore la sua versione della gameState
+    // Invia a ciascun giocatore la sua versione della gameState (con score iniettato)
     room.players.forEach((p) => {
       const clientSocket = io.sockets.sockets.get(p.id);
       if (clientSocket) {
-        clientSocket.emit("game_started", { gameState: buildClientState(room.gameState, p.id) });
+        clientSocket.emit("game_started", {
+          gameState: injectScore(buildClientState(room.gameState, p.id), room),
+        });
       }
     });
 
@@ -129,12 +150,18 @@ io.on("connection", (socket) => {
 
     clearTurnTimer(code);
 
-    // Invia stato personalizzato a ciascun giocatore
+    // Aggiorna score se la partita è finita
+    if (room.gameState.status === "finished") {
+      updateScore(room);
+      room.status = "finished";
+    }
+
+    // Invia stato personalizzato a ciascun giocatore (con score iniettato)
     room.players.forEach((p) => {
       const clientSocket = io.sockets.sockets.get(p.id);
       if (clientSocket) {
         clientSocket.emit("game_update", {
-          gameState: buildClientState(room.gameState, p.id),
+          gameState: injectScore(buildClientState(room.gameState, p.id), room),
           deviated: result.deviated,
           intendedIndex: result.intendedIndex,
           actualIndex: result.actualIndex,
@@ -142,16 +169,13 @@ io.on("connection", (socket) => {
       }
     });
 
-    if (room.gameState.status === "finished") {
-      room.status = "finished";
-    } else if (room.gameState.timerSeconds > 0) {
+    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
       startTurnTimer(code);
     }
   });
 
   // ----------------------------------------------------------
   // use_ability — Il client usa un'abilità speciale
-  // Payload: { abilityName: "scambia"|"bomba"|"fantasma", targetIndex?, index? }
   // ----------------------------------------------------------
   socket.on("use_ability", ({ abilityName, targetIndex, index }) => {
     const code = socket.data.roomCode;
@@ -165,23 +189,27 @@ io.on("connection", (socket) => {
 
     clearTurnTimer(code);
 
-    // Notifica tutti con stato personalizzato
+    // Aggiorna score se la partita è finita (es. Scambia che completa una linea)
+    if (room.gameState.status === "finished") {
+      updateScore(room);
+      room.status = "finished";
+    }
+
+    // Notifica tutti con stato personalizzato (con score iniettato)
     room.players.forEach((p) => {
       const clientSocket = io.sockets.sockets.get(p.id);
       if (clientSocket) {
         clientSocket.emit("ability_used", {
           playerId: socket.id,
           abilityName,
-          gameState: buildClientState(room.gameState, p.id),
+          gameState: injectScore(buildClientState(room.gameState, p.id), room),
         });
       }
     });
 
     console.log(`[ABILITY] ${socket.id} ha usato ${abilityName} in stanza ${code}`);
 
-    if (room.gameState.status === "finished") {
-      room.status = "finished";
-    } else if (room.gameState.timerSeconds > 0) {
+    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
       startTurnTimer(code);
     }
   });
@@ -193,6 +221,7 @@ io.on("connection", (socket) => {
     clearTurnTimer(code);
     room.status = "waiting";
     room.gameState = null;
+    // Lo score viene preservato — non viene azzerato
     io.to(code).emit("rematch_ready", { room });
   });
 

@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Game.jsx — Timer + Random + Abilità Speciali
+// pages/Game.jsx — Timer + Random + Abilità Speciali + Punteggio
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -55,8 +55,64 @@ function AbilityButton({ icon, label, uses, onClick, disabled, selecting }) {
   );
 }
 
+// ── ScoreDisplay ─────────────────────────────────────────────
+// Mostra punteggio a sinistra (tu, blu) e destra (avversario, rosso)
+function ScoreDisplay({ gameState, roomCode }) {
+  const myId = socket.id;
+  const score = gameState.score || {};
+
+  const me = gameState.players.find((p) => p.id === myId);
+  const opp = gameState.players.find((p) => p.id !== myId);
+
+  const myScore = score[myId] ?? 0;
+  const oppScore = score[opp?.id] ?? 0;
+
+  // Traccia i punteggi precedenti per animare quando aumentano
+  const prevMyScore = useRef(myScore);
+  const prevOppScore = useRef(oppScore);
+  const [myGlow, setMyGlow] = useState(false);
+  const [oppGlow, setOppGlow] = useState(false);
+
+  useEffect(() => {
+    if (myScore > prevMyScore.current) {
+      setMyGlow(true);
+      setTimeout(() => setMyGlow(false), 900);
+    }
+    prevMyScore.current = myScore;
+  }, [myScore]);
+
+  useEffect(() => {
+    if (oppScore > prevOppScore.current) {
+      setOppGlow(true);
+      setTimeout(() => setOppGlow(false), 900);
+    }
+    prevOppScore.current = oppScore;
+  }, [oppScore]);
+
+  return (
+    <div className="score-display">
+      {/* Punteggio mio — sempre a sinistra, blu */}
+      <div className={`score-side score-left ${myGlow ? "score-glow-blue" : ""}`}>
+        <span className="score-name-small">{me?.name || "Tu"}</span>
+        <span className="score-number score-blue">{myScore}</span>
+      </div>
+
+      {/* Codice stanza al centro */}
+      <div className="score-center">
+        <span className="room-code-label">#{roomCode}</span>
+      </div>
+
+      {/* Punteggio avversario — sempre a destra, rosso */}
+      <div className={`score-side score-right ${oppGlow ? "score-glow-red" : ""}`}>
+        <span className="score-name-small">{opp?.name || "Avversario"}</span>
+        <span className="score-number score-red">{oppScore}</span>
+      </div>
+    </div>
+  );
+}
+
 // ── Game page ─────────────────────────────────────────────────
-export default function Game({ initialGameState, player, onLeave }) {
+export default function Game({ initialGameState, player, roomCode, onLeave }) {
   const [gameState, setGameState] = useState(initialGameState);
   const [message, setMessage] = useState("");
   const [skippedMsg, setSkippedMsg] = useState("");
@@ -136,7 +192,7 @@ export default function Game({ initialGameState, player, onLeave }) {
 
   const handleAbilityClick = (abilityName) => {
     if (selectingAbility === abilityName) {
-      setSelectingAbility(null); // deseleziona
+      setSelectingAbility(null);
     } else {
       setSelectingAbility(abilityName);
       const hints = {
@@ -173,6 +229,9 @@ export default function Game({ initialGameState, player, onLeave }) {
           </span>
         </div>
       </div>
+
+      {/* Punteggio con codice stanza al centro */}
+      <ScoreDisplay gameState={gameState} roomCode={roomCode} />
 
       {(hasTimer || hasRandom || gameState.abilitiesEnabled) && (
         <div className="mode-badges">

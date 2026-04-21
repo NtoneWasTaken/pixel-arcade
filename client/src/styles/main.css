@@ -717,3 +717,96 @@ html, body, #root {
 .mode-badge { font-size:0.65rem; letter-spacing:0.08em; padding:4px 10px; border-radius:3px; border:1px solid var(--border2); color:var(--text-dim); }
 .mode-badge-random  { border-color:rgba(245,197,24,0.5); color:var(--gold); }
 .mode-badge-ability { border-color:rgba(0,212,255,0.5);  color:var(--cyan); }
+
+/* ============================================================
+   SCORE DISPLAY — Punteggio con codice stanza al centro
+   Aggiungere in fondo a main.css
+   ============================================================ */
+
+.score-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 360px;
+  margin: 0 auto 0.75rem;
+  padding: 0.5rem 1rem;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+/* Lato sinistro (tu) e destro (avversario) */
+.score-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 64px;
+  transition: transform 0.15s ease;
+}
+
+.score-left  { align-items: flex-start; }
+.score-right { align-items: flex-end; }
+
+.score-name-small {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.45);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
+}
+
+.score-number {
+  font-size: 1.9rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  transition: text-shadow 0.1s ease;
+}
+
+.score-blue { color: #60a5fa; }  /* blu */
+.score-red  { color: #f87171; }  /* rosso */
+
+/* Centro — codice stanza */
+.score-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.room-code-label {
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  color: rgba(255, 255, 255, 0.3);
+  text-transform: uppercase;
+}
+
+/* ── Animazione glow al punto ─────────────────────────────── */
+
+@keyframes scoreGlowBlue {
+  0%   { text-shadow: 0 0 0px #60a5fa;  transform: scale(1);    }
+  30%  { text-shadow: 0 0 18px #60a5fa, 0 0 32px #3b82f6; transform: scale(1.35); }
+  70%  { text-shadow: 0 0 12px #60a5fa; transform: scale(1.15); }
+  100% { text-shadow: 0 0 0px #60a5fa;  transform: scale(1);    }
+}
+
+@keyframes scoreGlowRed {
+  0%   { text-shadow: 0 0 0px #f87171;  transform: scale(1);    }
+  30%  { text-shadow: 0 0 18px #f87171, 0 0 32px #ef4444; transform: scale(1.35); }
+  70%  { text-shadow: 0 0 12px #f87171; transform: scale(1.15); }
+  100% { text-shadow: 0 0 0px #f87171;  transform: scale(1);    }
+}
+
+.score-glow-blue .score-number {
+  animation: scoreGlowBlue 0.9s ease-out forwards;
+}
+
+.score-glow-red .score-number {
+  animation: scoreGlowRed 0.9s ease-out forwards;
+}
