@@ -1,16 +1,59 @@
 // ============================================================
 // games/tictactoe.js — Logica server + timer + random + abilità + bot
+//                      Supporto griglie 3x3 / 4x4 / 5x5
 // ============================================================
 
-const WIN_LINES = [
-  [0, 1, 2], [3, 4, 5], [6, 7, 8],
-  [0, 3, 6], [1, 4, 7], [2, 5, 8],
-  [0, 4, 8], [2, 4, 6],
-];
+// Genera dinamicamente tutte le WIN_LINES per una griglia NxN
+// Su 3x3 → vinci con 3; su 4x4 → vinci con 4; su 5x5 → vinci con 4
+function getWinLines(gridSize) {
+  const winLen = gridSize === 3 ? 3 : 4; // 5x5 vince con 4 in fila
+  const lines = [];
+  const total = gridSize * gridSize;
 
-function initGame(players, timerSeconds = 0, randomChance = 0, abilitiesEnabled = false) {
+  // Righe
+  for (let r = 0; r < gridSize; r++) {
+    for (let c = 0; c <= gridSize - winLen; c++) {
+      const line = [];
+      for (let k = 0; k < winLen; k++) line.push(r * gridSize + c + k);
+      lines.push(line);
+    }
+  }
+
+  // Colonne
+  for (let c = 0; c < gridSize; c++) {
+    for (let r = 0; r <= gridSize - winLen; r++) {
+      const line = [];
+      for (let k = 0; k < winLen; k++) line.push((r + k) * gridSize + c);
+      lines.push(line);
+    }
+  }
+
+  // Diagonali ↘
+  for (let r = 0; r <= gridSize - winLen; r++) {
+    for (let c = 0; c <= gridSize - winLen; c++) {
+      const line = [];
+      for (let k = 0; k < winLen; k++) line.push((r + k) * gridSize + (c + k));
+      lines.push(line);
+    }
+  }
+
+  // Diagonali ↙
+  for (let r = 0; r <= gridSize - winLen; r++) {
+    for (let c = winLen - 1; c < gridSize; c++) {
+      const line = [];
+      for (let k = 0; k < winLen; k++) line.push((r + k) * gridSize + (c - k));
+      lines.push(line);
+    }
+  }
+
+  return lines;
+}
+
+function initGame(players, timerSeconds = 0, randomChance = 0, abilitiesEnabled = false, gridSize = 3) {
+  const total = gridSize * gridSize;
   return {
-    board: Array(9).fill(null),
+    board: Array(total).fill(null),
+    gridSize,
     players: [
       { ...players[0], symbol: "X" },
       { ...players[1], symbol: "O" },
@@ -33,9 +76,10 @@ function initGame(players, timerSeconds = 0, randomChance = 0, abilitiesEnabled 
 }
 
 function handleMove(gameState, playerId, index) {
+  const total = gameState.gridSize * gameState.gridSize;
   if (gameState.status !== "playing") return { error: "La partita è già terminata." };
   if (gameState.currentTurn !== playerId) return { error: "Non è il tuo turno." };
-  if (index < 0 || index > 8 || gameState.board[index] !== null) return { error: "Mossa non valida." };
+  if (index < 0 || index >= total || gameState.board[index] !== null) return { error: "Mossa non valida." };
 
   const player = gameState.players.find((p) => p.id === playerId);
   if (!player) return { error: "Giocatore non trovato." };
@@ -61,7 +105,8 @@ function handleMove(gameState, playerId, index) {
   gameState.board[actualIndex] = player.symbol;
   gameState.moveCount++;
 
-  const winLine = checkWin(gameState.board, player.symbol);
+  const winLines = getWinLines(gameState.gridSize);
+  const winLine = checkWin(gameState.board, player.symbol, winLines);
   if (winLine) {
     gameState.status = "finished";
     gameState.winner = playerId;
@@ -69,7 +114,7 @@ function handleMove(gameState, playerId, index) {
     return { deviated, intendedIndex: index, actualIndex };
   }
 
-  if (gameState.moveCount === 9) {
+  if (gameState.moveCount === total) {
     gameState.status = "finished";
     gameState.winner = "draw";
     return { deviated, intendedIndex: index, actualIndex };
@@ -94,7 +139,8 @@ function useScambia(gameState, playerId, targetIndex) {
 
   gameState.board[targetIndex] = player.symbol;
 
-  const winLine = checkWin(gameState.board, player.symbol);
+  const winLines = getWinLines(gameState.gridSize);
+  const winLine = checkWin(gameState.board, player.symbol, winLines);
   if (winLine) {
     gameState.status = "finished";
     gameState.winner = playerId;
@@ -181,8 +227,8 @@ function skipTurn(gameState) {
   if (gameState.timerSeconds > 0) gameState.turnStartedAt = Date.now();
 }
 
-function checkWin(board, symbol) {
-  for (const line of WIN_LINES) {
+function checkWin(board, symbol, winLines) {
+  for (const line of winLines) {
     if (line.every((i) => board[i] === symbol)) return line;
   }
   return null;
@@ -190,32 +236,35 @@ function checkWin(board, symbol) {
 
 // ── BOT ─────────────────────────────────────────────────────
 
-// Restituisce l'indice della mossa del bot
-function getBotMove(board, difficulty, botSymbol) {
+function getBotMove(board, difficulty, botSymbol, gridSize = 3) {
   if (difficulty === "easy") {
     return getBotMoveEasy(board);
   } else {
-    return getBotMoveHard(board, botSymbol);
+    return getBotMoveHard(board, botSymbol, gridSize);
   }
 }
 
-// Facile: cella libera casuale
 function getBotMoveEasy(board) {
   const free = board.map((c, i) => c === null ? i : null).filter(i => i !== null);
   if (free.length === 0) return null;
   return free[Math.floor(Math.random() * free.length)];
 }
 
-// Difficile: minimax — il bot non sbaglia mai
-function getBotMoveHard(board, botSymbol) {
+// Difficile: minimax con profondità limitata per griglie grandi
+function getBotMoveHard(board, botSymbol, gridSize) {
   const playerSymbol = botSymbol === "X" ? "O" : "X";
+  const winLines = getWinLines(gridSize);
+
+  // Profondità in base alla dimensione: 3x3→9, 4x4→4, 5x5→3
+  const maxDepth = gridSize === 3 ? 9 : gridSize === 4 ? 4 : 3;
+
   let bestScore = -Infinity;
   let bestMove = null;
 
-  for (let i = 0; i < 9; i++) {
+  for (let i = 0; i < board.length; i++) {
     if (board[i] !== null) continue;
     board[i] = botSymbol;
-    const score = minimax(board, 0, false, botSymbol, playerSymbol);
+    const score = minimax(board, 0, false, botSymbol, playerSymbol, winLines, maxDepth);
     board[i] = null;
     if (score > bestScore) {
       bestScore = score;
@@ -226,30 +275,30 @@ function getBotMoveHard(board, botSymbol) {
   return bestMove;
 }
 
-function minimax(board, depth, isMaximizing, botSymbol, playerSymbol) {
-  const winBot = checkWin(board, botSymbol);
-  const winPlayer = checkWin(board, playerSymbol);
+function minimax(board, depth, isMaximizing, botSymbol, playerSymbol, winLines, maxDepth) {
+  const winBot = checkWin(board, botSymbol, winLines);
+  const winPlayer = checkWin(board, playerSymbol, winLines);
   const free = board.filter(c => c === null).length;
 
   if (winBot) return 10 - depth;
   if (winPlayer) return depth - 10;
-  if (free === 0) return 0;
+  if (free === 0 || depth >= maxDepth) return 0;
 
   if (isMaximizing) {
     let best = -Infinity;
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < board.length; i++) {
       if (board[i] !== null) continue;
       board[i] = botSymbol;
-      best = Math.max(best, minimax(board, depth + 1, false, botSymbol, playerSymbol));
+      best = Math.max(best, minimax(board, depth + 1, false, botSymbol, playerSymbol, winLines, maxDepth));
       board[i] = null;
     }
     return best;
   } else {
     let best = Infinity;
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < board.length; i++) {
       if (board[i] !== null) continue;
       board[i] = playerSymbol;
-      best = Math.min(best, minimax(board, depth + 1, true, botSymbol, playerSymbol));
+      best = Math.min(best, minimax(board, depth + 1, true, botSymbol, playerSymbol, winLines, maxDepth));
       board[i] = null;
     }
     return best;

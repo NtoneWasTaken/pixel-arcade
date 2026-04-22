@@ -17,6 +17,12 @@ const RANDOM_OPTIONS = [
   { label: "Anarchia",    value: 0.6 },
 ];
 
+const GRID_OPTIONS = [
+  { label: "3×3", value: 3, desc: "Classico" },
+  { label: "4×4", value: 4, desc: "4 in fila" },
+  { label: "5×5", value: 5, desc: "4 in fila" },
+];
+
 export default function Home({ onRoomJoined, onBotGame }) {
   const [playerName, setPlayerName] = useState("");
   const [joinCode, setJoinCode]     = useState("");
@@ -29,6 +35,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
   const [botTimer,         setBotTimer]         = useState(0);
   const [botRandom,        setBotRandom]        = useState(0);
   const [botAbilities,     setBotAbilities]     = useState(false);
+  const [botGridSize,      setBotGridSize]      = useState(3);
 
   useEffect(() => {
     const handleRoomCreated = ({ roomCode, player }) => {
@@ -84,11 +91,12 @@ export default function Home({ onRoomJoined, onBotGame }) {
     if (!playerName.trim()) { setError("Inserisci il tuo nome!"); return; }
     setError(""); setLoading(true);
     socket.emit("create_bot_room", {
-      playerName:      playerName.trim(),
-      difficulty:      botDifficulty,
-      timerSeconds:    botTimer,
-      randomChance:    botRandom,
+      playerName:       playerName.trim(),
+      difficulty:       botDifficulty,
+      timerSeconds:     botTimer,
+      randomChance:     botRandom,
       abilitiesEnabled: botAbilities,
+      gridSize:         botGridSize,
     });
   };
 
@@ -194,9 +202,27 @@ export default function Home({ onRoomJoined, onBotGame }) {
                   💀 Difficile
                 </button>
               </div>
-              {botDifficulty === "hard" && (
+              {botDifficulty === "hard" && botGridSize === 3 && (
                 <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale — non si può battere!</p>
               )}
+              {botDifficulty === "hard" && botGridSize > 3 && (
+                <p className="bot-hard-warning">⚠️ Il bot usa strategia avanzata su griglia {botGridSize}×{botGridSize}.</p>
+              )}
+            </div>
+
+            {/* Dimensione griglia */}
+            <div className="bot-option-group">
+              <p className="bot-option-label">⊞ Dimensione Griglia</p>
+              <div className="timer-options">
+                {GRID_OPTIONS.map(opt => (
+                  <button key={opt.value}
+                    className={`timer-option ${botGridSize === opt.value ? "selected" : ""}`}
+                    onClick={() => setBotGridSize(opt.value)}>
+                    <span className="timer-icon">{opt.label}</span>
+                    <span className="timer-label">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Timer */}
