@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Timer + Random + Abilità Speciali + Punteggio + GridSize
+// pages/Lobby.jsx — Timer + Random + Abilità + Punteggio + GridSize + Ultimate
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -18,40 +18,32 @@ const RANDOM_OPTIONS = [
 ];
 
 const GRID_OPTIONS = [
-  { label: "3×3", value: 3, icon: "▦", desc: "Classico" },
-  { label: "4×4", value: 4, icon: "▦", desc: "4 in fila" },
-  { label: "5×5", value: 5, icon: "▦", desc: "4 in fila" },
+  { label: "3×3",      value: 3,          icon: "▦", desc: "Classico" },
+  { label: "4×4",      value: 4,          icon: "▦", desc: "4 in fila" },
+  { label: "5×5",      value: 5,          icon: "▦", desc: "4 in fila" },
+  { label: "Ultimate", value: "ultimate", icon: "⊞", desc: "9 griglie" },
 ];
 
 // ── ScoreDisplay ─────────────────────────────────────────────
 function ScoreDisplay({ room, myId }) {
   const players = room?.players || [];
   const score = room?.score || {};
-
   const me = players.find((p) => p.id === myId);
   const opp = players.find((p) => p.id !== myId);
-
   const myScore = score[myId] ?? 0;
   const oppScore = score[opp?.id] ?? 0;
-
   const prevMyScore = useRef(myScore);
   const prevOppScore = useRef(oppScore);
   const [myGlow, setMyGlow] = useState(false);
   const [oppGlow, setOppGlow] = useState(false);
 
   useEffect(() => {
-    if (myScore > prevMyScore.current) {
-      setMyGlow(true);
-      setTimeout(() => setMyGlow(false), 900);
-    }
+    if (myScore > prevMyScore.current) { setMyGlow(true); setTimeout(() => setMyGlow(false), 900); }
     prevMyScore.current = myScore;
   }, [myScore]);
 
   useEffect(() => {
-    if (oppScore > prevOppScore.current) {
-      setOppGlow(true);
-      setTimeout(() => setOppGlow(false), 900);
-    }
+    if (oppScore > prevOppScore.current) { setOppGlow(true); setTimeout(() => setOppGlow(false), 900); }
     prevOppScore.current = oppScore;
   }, [oppScore]);
 
@@ -83,6 +75,8 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
   const [abilitiesEnabled, setAbilitiesEnabled] = useState(false);
   const [gridSize, setGridSize] = useState(3);
 
+  const isUltimate = gridSize === "ultimate";
+
   useEffect(() => {
     const handlePlayerJoined = ({ room: r }) => setRoom(r);
     const handleGameStarted = ({ gameState }) => onGameStart(gameState);
@@ -104,7 +98,13 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
   const handleStart = () => {
     setError("");
-    socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize });
+    socket.emit("start_game", {
+      timerSeconds,
+      randomChance,
+      // In Ultimate le abilità non sono supportate
+      abilitiesEnabled: isUltimate ? false : abilitiesEnabled,
+      gridSize,
+    });
   };
 
   const copyCode = () => {
@@ -165,17 +165,23 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
         <>
           {/* Dimensione griglia */}
           <div className="timer-section">
-            <h3 className="section-title">⊞ Dimensione Griglia</h3>
+            <h3 className="section-title">⊞ Modalità di gioco</h3>
             <div className="timer-options">
               {GRID_OPTIONS.map((opt) => (
                 <button key={opt.value}
-                  className={`timer-option ${gridSize === opt.value ? "selected" : ""}`}
+                  className={`timer-option ${gridSize === opt.value ? "selected" : ""} ${opt.value === "ultimate" ? "timer-option-ultimate" : ""}`}
                   onClick={() => setGridSize(opt.value)}>
-                  <span className="timer-icon">{opt.label}</span>
-                  <span className="timer-label">{opt.desc}</span>
+                  <span className="timer-icon">{opt.icon}</span>
+                  <span className="timer-label">{opt.label}</span>
+                  <span className="timer-sublabel">{opt.desc}</span>
                 </button>
               ))}
             </div>
+            {isUltimate && (
+              <p className="ultimate-hint">
+                🧠 Gioca in 9 sotto-griglie collegate. Dove giochi determina dove gioca l'avversario!
+              </p>
+            )}
           </div>
 
           {/* Timer */}
@@ -208,21 +214,23 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
             </div>
           </div>
 
-          {/* Abilità Speciali */}
-          <div className="timer-section">
-            <h3 className="section-title">⚡ Abilità Speciali</h3>
-            <div className="abilities-preview">
-              <div className="ability-preview-item"><span>🔄</span><span>Scambia</span></div>
-              <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
-              <div className="ability-preview-item"><span>👁️</span><span>Fantasma</span></div>
+          {/* Abilità Speciali — disabilitate in Ultimate */}
+          {!isUltimate && (
+            <div className="timer-section">
+              <h3 className="section-title">⚡ Abilità Speciali</h3>
+              <div className="abilities-preview">
+                <div className="ability-preview-item"><span>🔄</span><span>Scambia</span></div>
+                <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
+                <div className="ability-preview-item"><span>👁️</span><span>Fantasma</span></div>
+              </div>
+              <button
+                className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`}
+                onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
+              >
+                {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
+              </button>
             </div>
-            <button
-              className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`}
-              onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
-            >
-              {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
-            </button>
-          </div>
+          )}
         </>
       ) : (
         <div className="timer-section">

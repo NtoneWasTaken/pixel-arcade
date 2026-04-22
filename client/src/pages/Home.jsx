@@ -18,53 +18,46 @@ const RANDOM_OPTIONS = [
 ];
 
 const GRID_OPTIONS = [
-  { label: "3×3", value: 3, desc: "Classico" },
-  { label: "4×4", value: 4, desc: "4 in fila" },
-  { label: "5×5", value: 5, desc: "4 in fila" },
+  { label: "3×3",      value: 3,          desc: "Classico" },
+  { label: "4×4",      value: 4,          desc: "4 in fila" },
+  { label: "5×5",      value: 5,          desc: "4 in fila" },
+  { label: "Ultimate", value: "ultimate", desc: "9 griglie" },
 ];
 
 export default function Home({ onRoomJoined, onBotGame }) {
   const [playerName, setPlayerName] = useState("");
   const [joinCode, setJoinCode]     = useState("");
-  const [mode, setMode]             = useState(null); // "create" | "join" | "bot"
+  const [mode, setMode]             = useState(null);
   const [error, setError]           = useState("");
   const [loading, setLoading]       = useState(false);
 
-  // Bot settings
-  const [botDifficulty,    setBotDifficulty]    = useState("easy");
-  const [botTimer,         setBotTimer]         = useState(0);
-  const [botRandom,        setBotRandom]        = useState(0);
-  const [botAbilities,     setBotAbilities]     = useState(false);
-  const [botGridSize,      setBotGridSize]      = useState(3);
+  const [botDifficulty, setBotDifficulty] = useState("easy");
+  const [botTimer,      setBotTimer]      = useState(0);
+  const [botRandom,     setBotRandom]     = useState(0);
+  const [botAbilities,  setBotAbilities]  = useState(false);
+  const [botGridSize,   setBotGridSize]   = useState(3);
+
+  const isUltimate = botGridSize === "ultimate";
 
   useEffect(() => {
     const handleRoomCreated = ({ roomCode, player }) => {
       setLoading(false);
       onRoomJoined({ roomCode, player, isHost: true });
     };
-
     const handlePlayerJoined = ({ room }) => {
       setLoading(false);
       const me = room.players[room.players.length - 1];
       onRoomJoined({ roomCode: room.code, player: { ...me, isHost: false }, isHost: false, room });
     };
-
     const handleGameStarted = ({ gameState, isBot, botDifficulty: diff }) => {
-      if (isBot) {
-        setLoading(false);
-        onBotGame({ gameState, botDifficulty: diff });
-      }
+      if (isBot) { setLoading(false); onBotGame({ gameState, botDifficulty: diff }); }
     };
+    const handleError = ({ message }) => { setLoading(false); setError(message); };
 
-    const handleError = ({ message }) => {
-      setLoading(false);
-      setError(message);
-    };
-
-    socket.on("room_created",   handleRoomCreated);
-    socket.on("player_joined",  handlePlayerJoined);
-    socket.on("game_started",   handleGameStarted);
-    socket.on("error",          handleError);
+    socket.on("room_created",  handleRoomCreated);
+    socket.on("player_joined", handlePlayerJoined);
+    socket.on("game_started",  handleGameStarted);
+    socket.on("error",         handleError);
 
     return () => {
       socket.off("room_created",  handleRoomCreated);
@@ -95,7 +88,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
       difficulty:       botDifficulty,
       timerSeconds:     botTimer,
       randomChance:     botRandom,
-      abilitiesEnabled: botAbilities,
+      abilitiesEnabled: isUltimate ? false : botAbilities,
       gridSize:         botGridSize,
     });
   };
@@ -125,22 +118,14 @@ export default function Home({ onRoomJoined, onBotGame }) {
           />
         </div>
 
-        {/* Pulsanti principali */}
         {!mode && (
           <div className="action-buttons">
-            <button className="btn btn-primary" onClick={() => setMode("create")}>
-              ✦ Crea Stanza
-            </button>
-            <button className="btn btn-secondary" onClick={() => setMode("join")}>
-              ⟶ Entra con codice
-            </button>
-            <button className="btn btn-bot" onClick={() => setMode("bot")}>
-              🤖 Gioca vs Bot
-            </button>
+            <button className="btn btn-primary"   onClick={() => setMode("create")}>✦ Crea Stanza</button>
+            <button className="btn btn-secondary" onClick={() => setMode("join")}>⟶ Entra con codice</button>
+            <button className="btn btn-bot"       onClick={() => setMode("bot")}>🤖 Gioca vs Bot</button>
           </div>
         )}
 
-        {/* Crea stanza */}
         {mode === "create" && (
           <div className="mode-section">
             <p className="mode-hint">Verrà generato un codice da condividere con l&apos;amico.</p>
@@ -148,14 +133,11 @@ export default function Home({ onRoomJoined, onBotGame }) {
               <button className="btn btn-primary" onClick={handleCreate} disabled={loading}>
                 {loading ? "Creando…" : "✦ Crea la stanza"}
               </button>
-              <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>
-                ← Indietro
-              </button>
+              <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>← Indietro</button>
             </div>
           </div>
         )}
 
-        {/* Entra con codice */}
         {mode === "join" && (
           <div className="mode-section">
             <div className="input-group">
@@ -174,14 +156,11 @@ export default function Home({ onRoomJoined, onBotGame }) {
               <button className="btn btn-primary" onClick={handleJoin} disabled={loading}>
                 {loading ? "Entrando…" : "⟶ Entra"}
               </button>
-              <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>
-                ← Indietro
-              </button>
+              <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>← Indietro</button>
             </div>
           </div>
         )}
 
-        {/* Gioca vs Bot */}
         {mode === "bot" && (
           <div className="mode-section">
 
@@ -189,40 +168,42 @@ export default function Home({ onRoomJoined, onBotGame }) {
             <div className="bot-option-group">
               <p className="bot-option-label">🤖 Difficoltà</p>
               <div className="bot-difficulty-btns">
-                <button
-                  className={`btn ${botDifficulty === "easy" ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => setBotDifficulty("easy")}
-                >
-                  😊 Facile
-                </button>
-                <button
-                  className={`btn ${botDifficulty === "hard" ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => setBotDifficulty("hard")}
-                >
-                  💀 Difficile
-                </button>
+                <button className={`btn ${botDifficulty === "easy" ? "btn-primary" : "btn-ghost"}`}
+                  onClick={() => setBotDifficulty("easy")}>😊 Facile</button>
+                {!isUltimate && (
+                  <button className={`btn ${botDifficulty === "hard" ? "btn-primary" : "btn-ghost"}`}
+                    onClick={() => setBotDifficulty("hard")}>💀 Difficile</button>
+                )}
               </div>
-              {botDifficulty === "hard" && botGridSize === 3 && (
+              {botDifficulty === "hard" && !isUltimate && botGridSize === 3 && (
                 <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale — non si può battere!</p>
               )}
-              {botDifficulty === "hard" && botGridSize > 3 && (
+              {botDifficulty === "hard" && !isUltimate && botGridSize > 3 && (
                 <p className="bot-hard-warning">⚠️ Il bot usa strategia avanzata su griglia {botGridSize}×{botGridSize}.</p>
+              )}
+              {isUltimate && (
+                <p className="bot-hard-warning">🧠 In modalità Ultimate il bot gioca casuale.</p>
               )}
             </div>
 
-            {/* Dimensione griglia */}
+            {/* Modalità di gioco */}
             <div className="bot-option-group">
-              <p className="bot-option-label">⊞ Dimensione Griglia</p>
+              <p className="bot-option-label">⊞ Modalità di gioco</p>
               <div className="timer-options">
                 {GRID_OPTIONS.map(opt => (
                   <button key={opt.value}
-                    className={`timer-option ${botGridSize === opt.value ? "selected" : ""}`}
-                    onClick={() => setBotGridSize(opt.value)}>
+                    className={`timer-option ${botGridSize === opt.value ? "selected" : ""} ${opt.value === "ultimate" ? "timer-option-ultimate" : ""}`}
+                    onClick={() => { setBotGridSize(opt.value); if (opt.value === "ultimate") setBotDifficulty("easy"); }}>
                     <span className="timer-icon">{opt.label}</span>
                     <span className="timer-label">{opt.desc}</span>
                   </button>
                 ))}
               </div>
+              {isUltimate && (
+                <p className="ultimate-hint">
+                  🧠 Dove giochi determina dove gioca l'avversario!
+                </p>
+              )}
             </div>
 
             {/* Timer */}
@@ -253,23 +234,23 @@ export default function Home({ onRoomJoined, onBotGame }) {
               </div>
             </div>
 
-            {/* Abilità */}
-            <div className="bot-option-group">
-              <button
-                className={`ability-toggle ${botAbilities ? "enabled" : ""}`}
-                onClick={() => setBotAbilities(!botAbilities)}
-              >
-                {botAbilities ? "✓ Abilità ATTIVE" : "⚡ Attiva Abilità Speciali"}
-              </button>
-            </div>
+            {/* Abilità — nascoste in Ultimate */}
+            {!isUltimate && (
+              <div className="bot-option-group">
+                <button
+                  className={`ability-toggle ${botAbilities ? "enabled" : ""}`}
+                  onClick={() => setBotAbilities(!botAbilities)}
+                >
+                  {botAbilities ? "✓ Abilità ATTIVE" : "⚡ Attiva Abilità Speciali"}
+                </button>
+              </div>
+            )}
 
             <div className="action-buttons">
               <button className="btn btn-bot" onClick={handleBotStart} disabled={loading}>
                 {loading ? "Avviando…" : "🤖 Inizia vs Bot"}
               </button>
-              <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>
-                ← Indietro
-              </button>
+              <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>← Indietro</button>
             </div>
           </div>
         )}

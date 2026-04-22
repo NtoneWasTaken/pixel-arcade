@@ -1,5 +1,5 @@
 // ============================================================
-// server.js — Timer + Random + Abilità Speciali + Punteggio + Bot + GridSize
+// server.js — Timer + Random + Abilità + Punteggio + Bot + GridSize + Ultimate
 // ============================================================
 const express = require("express");
 const http = require("http");
@@ -82,11 +82,14 @@ function scheduleBotMove(roomCode) {
     if (room.gameState.currentTurn !== room.botId) return;
 
     const botPlayer = room.gameState.players.find(p => p.id === room.botId);
+    const gridSize  = room.gameState.gridSize || room.gameState.mode === "ultimate" ? "ultimate" : 3;
+
     const moveIndex = getBotMove(
-      room.gameState.board,
+      room.gameState.mode === "ultimate" ? [] : room.gameState.board,
       room.botDifficulty,
       botPlayer.symbol,
-      room.gameState.gridSize
+      room.gameState.mode === "ultimate" ? "ultimate" : room.gameState.gridSize,
+      room.gameState
     );
     if (moveIndex === null) return;
 
@@ -103,7 +106,7 @@ function scheduleBotMove(roomCode) {
     const humanSocket = io.sockets.sockets.get(room.humanId);
     if (humanSocket) {
       humanSocket.emit("game_update", {
-        gameState: injectScore(buildClientState(room.gameState, room.humanId), room),
+        gameState: injectScore(room.gameState, room),
         deviated: result.deviated,
         intendedIndex: result.intendedIndex,
         actualIndex: result.actualIndex,
@@ -168,7 +171,6 @@ io.on("connection", (socket) => {
     room.isBot = true;
 
     addPlayerToRoom(room.code, bot);
-
     socket.join(room.code);
     socket.data.roomCode = room.code;
     socket.data.playerName = human.name;
@@ -182,7 +184,8 @@ io.on("connection", (socket) => {
       botDifficulty: difficulty,
     });
 
-    console.log(`[BOT] Partita vs bot avviata in ${room.code} — difficoltà: ${difficulty} — griglia: ${gridSize}x${gridSize}`);
+    const modeLabel = gridSize === "ultimate" ? "Ultimate" : `${gridSize}x${gridSize}`;
+    console.log(`[BOT] Partita vs bot avviata in ${room.code} — difficoltà: ${difficulty} — modalità: ${modeLabel}`);
 
     if (room.gameState.currentTurn === BOT_ID) {
       scheduleBotMove(room.code);
@@ -219,7 +222,8 @@ io.on("connection", (socket) => {
       }
     });
 
-    console.log(`[GAME] Avviata in ${code} — timer:${timerSeconds}s random:${randomChance} abilità:${abilitiesEnabled} griglia:${gridSize}x${gridSize}`);
+    const modeLabel = gridSize === "ultimate" ? "Ultimate" : `${gridSize}x${gridSize}`;
+    console.log(`[GAME] Avviata in ${code} — timer:${timerSeconds}s random:${randomChance} abilità:${abilitiesEnabled} modalità:${modeLabel}`);
     if (timerSeconds > 0) startTurnTimer(code);
   });
 
@@ -273,9 +277,7 @@ io.on("connection", (socket) => {
     const room = getRoom(code);
     if (!room || room.status !== "playing") return;
 
-    const payload = { targetIndex, index };
-    const result = handleAbility(room.gameState, socket.id, abilityName, payload);
-
+    const result = handleAbility(room.gameState, socket.id, abilityName, { targetIndex, index });
     if (result.error) { socket.emit("error", { message: result.error }); return; }
 
     clearTurnTimer(code);
@@ -287,8 +289,7 @@ io.on("connection", (socket) => {
 
     if (room.isBot) {
       socket.emit("ability_used", {
-        playerId: socket.id,
-        abilityName,
+        playerId: socket.id, abilityName,
         gameState: injectScore(room.gameState, room),
       });
     } else {
@@ -296,15 +297,12 @@ io.on("connection", (socket) => {
         const clientSocket = io.sockets.sockets.get(p.id);
         if (clientSocket) {
           clientSocket.emit("ability_used", {
-            playerId: socket.id,
-            abilityName,
+            playerId: socket.id, abilityName,
             gameState: injectScore(buildClientState(room.gameState, p.id), room),
           });
         }
       });
     }
-
-    console.log(`[ABILITY] ${socket.id} ha usato ${abilityName} in stanza ${code}`);
 
     if (room.gameState.status === "finished") return;
 
@@ -322,16 +320,16 @@ io.on("connection", (socket) => {
     clearTurnTimer(code);
 
     if (room.isBot) {
-      const human = room.players.find(p => p.id === room.humanId);
-      const bot   = room.players.find(p => p.id === room.botId);
+      const human  = room.players.find(p => p.id === room.humanId);
+      const bot    = room.players.find(p => p.id === room.botId);
       const prevGs = room.gameState;
-      room.status = "playing";
+      room.status  = "playing";
       room.gameState = initGame(
         [human, bot],
         prevGs.timerSeconds,
         prevGs.randomChance,
         prevGs.abilitiesEnabled,
-        prevGs.gridSize
+        prevGs.gridSize || (prevGs.mode === "ultimate" ? "ultimate" : 3)
       );
 
       socket.emit("game_started", {
