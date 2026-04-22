@@ -1,9 +1,10 @@
 // ============================================================
-// pages/Game.jsx — Timer + Random + Abilità + Punteggio + Bot + Ultimate TTT
+// pages/Game.jsx — Timer + Random + Abilità + Punteggio + Bot + Chat
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
 import TicTacToeBoard from "../components/TicTacToeBoard";
+import ChatBox from "../components/ChatBox";
 
 // ── TimerBar ─────────────────────────────────────────────────
 function TimerBar({ timerSeconds, turnStartedAt, currentTurn, myId }) {
@@ -39,7 +40,7 @@ function TimerBar({ timerSeconds, turnStartedAt, currentTurn, myId }) {
   );
 }
 
-// ── AbilityButton ─────────────────────────────────────────────
+// ── AbilityButton ────────────────────────────────────────────
 function AbilityButton({ icon, label, uses, onClick, disabled, selecting }) {
   return (
     <button
@@ -59,10 +60,13 @@ function AbilityButton({ icon, label, uses, onClick, disabled, selecting }) {
 function ScoreDisplay({ gameState, roomCode }) {
   const myId = socket.id;
   const score = gameState.score || {};
+
   const me  = gameState.players.find((p) => p.id === myId);
   const opp = gameState.players.find((p) => p.id !== myId);
-  const myScore  = score[myId]     ?? 0;
-  const oppScore = score[opp?.id]  ?? 0;
+
+  const myScore  = score[myId]    ?? 0;
+  const oppScore = score[opp?.id] ?? 0;
+
   const prevMyScore  = useRef(myScore);
   const prevOppScore = useRef(oppScore);
   const [myGlow,  setMyGlow]  = useState(false);
@@ -95,73 +99,6 @@ function ScoreDisplay({ gameState, roomCode }) {
   );
 }
 
-// ── UltimateTTTBoard ─────────────────────────────────────────
-// Renderizza la griglia 3x3 di sotto-griglie 3x3
-function UltimateTTTBoard({ gameState, onCellClick, disabled, myId }) {
-  const { subBoards, metaBoard, activeSubBoard, winLine } = gameState;
-  const opponent = gameState.players.find(p => p.id !== myId);
-
-  return (
-    <div className="ultimate-board">
-      {subBoards.map((subBoard, subIdx) => {
-        const metaResult = metaBoard[subIdx]; // null | "X" | "O" | "draw"
-        const isActive   = activeSubBoard === null
-          ? metaResult === null   // libera scelta: qualsiasi sotto-griglia non conclusa
-          : activeSubBoard === subIdx;
-        const isWinLine  = winLine?.includes(subIdx);
-
-        return (
-          <div
-            key={subIdx}
-            className={`ultimate-sub-wrapper
-              ${isActive && !disabled ? "ultimate-sub-active" : ""}
-              ${metaResult ? "ultimate-sub-done" : ""}
-              ${isWinLine ? "ultimate-sub-win" : ""}
-            `}
-          >
-            {/* Overlay se la sotto-griglia è conclusa */}
-            {metaResult && metaResult !== "draw" && (
-              <div className={`ultimate-sub-overlay ${metaResult === "X" ? "overlay-x" : "overlay-o"}`}>
-                {metaResult === "X" ? <span className="symbol-x">✕</span> : <span className="symbol-o">◯</span>}
-              </div>
-            )}
-            {metaResult === "draw" && (
-              <div className="ultimate-sub-overlay overlay-draw">
-                <span>—</span>
-              </div>
-            )}
-
-            {/* Le 9 celle della sotto-griglia */}
-            <div className="ultimate-sub-grid">
-              {subBoard.map((cell, cellIdx) => {
-                const globalIndex = subIdx * 9 + cellIdx;
-                const canClick = !disabled && isActive && metaResult === null && cell === null;
-
-                return (
-                  <button
-                    key={cellIdx}
-                    className={`ultimate-cell
-                      ${cell === "X" ? "cell-x" : ""}
-                      ${cell === "O" ? "cell-o" : ""}
-                      ${canClick ? "cell-empty" : ""}
-                    `}
-                    onClick={() => canClick && onCellClick(globalIndex)}
-                    disabled={!canClick}
-                    aria-label={`Sotto-griglia ${subIdx + 1}, cella ${cellIdx + 1}`}
-                  >
-                    {cell === "X" && <span className="symbol-x ultimate-symbol">✕</span>}
-                    {cell === "O" && <span className="symbol-o ultimate-symbol">◯</span>}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── Game page ─────────────────────────────────────────────────
 export default function Game({ initialGameState, player, roomCode, isBot = false, onLeave }) {
   const [gameState,        setGameState]        = useState(initialGameState);
@@ -169,45 +106,35 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
   const [skippedMsg,       setSkippedMsg]       = useState("");
   const [deviationAnim,    setDeviationAnim]    = useState(null);
   const [notification,     setNotification]     = useState("");
-  const [botThinking,      setBotThinking]      = useState(false);
   const [selectingAbility, setSelectingAbility] = useState(null);
-
-  const isUltimate = gameState.mode === "ultimate";
 
   useEffect(() => { updateMessage(initialGameState); }, []);
 
   useEffect(() => {
     const handleGameUpdate = ({ gameState: gs, deviated, intendedIndex, actualIndex }) => {
-      setBotThinking(false);
       setGameState(gs); updateMessage(gs); setSkippedMsg("");
       if (deviated) {
         setDeviationAnim({ intended: intendedIndex, actual: actualIndex });
         setTimeout(() => setDeviationAnim(null), 700);
       }
-      if (isBot && gs.status === "playing" && gs.currentTurn !== socket.id) {
-        setBotThinking(true);
-      }
     };
     const handleGameStarted = ({ gameState: gs }) => {
-      setGameState(gs); updateMessage(gs); setBotThinking(false);
+      setGameState(gs); updateMessage(gs);
       setSelectingAbility(null);
     };
     const handleAbilityUsed = ({ playerId, abilityName, gameState: gs }) => {
-      setBotThinking(false);
       setGameState(gs); updateMessage(gs);
       const names = { scambia: "🔄 Scambia", bomba: "💣 Bomba", fantasma: "👁️ Fantasma" };
       const who = playerId === socket.id ? "Hai usato" : "L'avversario ha usato";
       showNotification(`${who} ${names[abilityName]}!`);
       setSelectingAbility(null);
-      if (isBot && gs.status === "playing" && gs.currentTurn !== socket.id) setBotThinking(true);
     };
     const handleTurnSkipped = ({ skippedPlayerId, gameState: gs }) => {
       setGameState(gs); updateMessage(gs);
       setSkippedMsg(skippedPlayerId === socket.id ? "Hai esaurito il tempo! Turno saltato." : "L'avversario ha esaurito il tempo! Tocca a te.");
       setTimeout(() => setSkippedMsg(""), 2500);
-      if (isBot && gs.status === "playing" && gs.currentTurn !== socket.id) setBotThinking(true);
     };
-    const handleGameAborted = ({ message: msg }) => setMessage(msg);
+    const handleGameAborted  = ({ message: msg }) => setMessage(msg);
     const handleRematchReady = ({ room }) => onLeave("lobby", room);
 
     socket.on("game_update",   handleGameUpdate);
@@ -225,22 +152,13 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
       socket.off("game_aborted",  handleGameAborted);
       socket.off("rematch_ready", handleRematchReady);
     };
-  }, [onLeave, isBot]);
+  }, [onLeave]);
 
   function updateMessage(gs) {
     if (gs.status === "finished") {
       if (gs.winner === "draw") setMessage("Pareggio!");
       else if (gs.winner === socket.id) setMessage("🎉 Hai vinto!");
       else setMessage(isBot ? "🤖 Il bot ha vinto!" : "Hai perso. Ritenta!");
-      return;
-    }
-    if (isUltimate && gs.activeSubBoard !== null) {
-      const subNames = ["↖","↑","↗","←","●","→","↙","↓","↙"];
-      if (gs.currentTurn === socket.id) {
-        setMessage(`⊞ Gioca nella sotto-griglia ${gs.activeSubBoard + 1}`);
-      } else {
-        setMessage(`Turno di ${gs.players.find(p => p.id !== socket.id)?.name}…`);
-      }
       return;
     }
     if (isBot) {
@@ -256,13 +174,10 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
   }
 
   const handleCellClick = (index) => {
-    if (!isUltimate && selectingAbility === "scambia") {
-      socket.emit("use_ability", { abilityName: "scambia", targetIndex: index });
+    if (selectingAbility === "scambia" || selectingAbility === "bomba") {
+      socket.emit("use_ability", { abilityName: selectingAbility, targetIndex: index });
       setSelectingAbility(null);
-    } else if (!isUltimate && selectingAbility === "bomba") {
-      socket.emit("use_ability", { abilityName: "bomba", targetIndex: index });
-      setSelectingAbility(null);
-    } else if (!isUltimate && selectingAbility === "fantasma") {
+    } else if (selectingAbility === "fantasma") {
       socket.emit("use_ability", { abilityName: "fantasma", index });
       setSelectingAbility(null);
     } else {
@@ -290,26 +205,19 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
   const iWon       = isFinished && gameState.winner === socket.id;
   const isDraw     = isFinished && gameState.winner === "draw";
 
-  const myAbilities  = !isUltimate && gameState.abilitiesEnabled ? (gameState.abilities?.[socket.id] || {}) : null;
-  const oppAbilities = !isUltimate && gameState.abilitiesEnabled
+  const myAbilities  = gameState.abilitiesEnabled ? (gameState.abilities?.[socket.id] || {}) : null;
+  const oppAbilities = gameState.abilitiesEnabled
     ? (gameState.abilities?.[gameState.players.find(p => p.id !== socket.id)?.id] || {})
     : null;
 
   const hasTimer  = gameState.timerSeconds > 0;
   const hasRandom = gameState.randomChance > 0;
 
-  // Messaggio sotto-griglia attiva per Ultimate
-  const activeSubMsg = isUltimate && !isFinished && gameState.activeSubBoard !== null && isMyTurn
-    ? `Devi giocare nella sotto-griglia ${gameState.activeSubBoard + 1}`
-    : isUltimate && !isFinished && gameState.activeSubBoard === null && isMyTurn
-    ? "Puoi giocare in qualsiasi sotto-griglia!"
-    : null;
-
   return (
     <div className="game-page">
       <div className="game-header">
         <button className="btn btn-ghost btn-sm" onClick={() => onLeave("home")}>✕ Abbandona</button>
-        <h2 className="game-title">{isUltimate ? "ULTIMATE TTT" : "TIC TAC TOE"}</h2>
+        <h2 className="game-title">TIC TAC TOE</h2>
         <div className="my-symbol">
           <span className={`symbol-badge ${myPlayer?.symbol === "X" ? "x" : "o"}`}>
             Sei {myPlayer?.symbol === "X" ? "✕" : "◯"}
@@ -321,11 +229,10 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
 
       {isBot && <div className="bot-indicator">🤖 Stai giocando contro il Bot</div>}
 
-      {(hasTimer || hasRandom || gameState.abilitiesEnabled || isUltimate) && (
+      {(hasTimer || hasRandom || gameState.abilitiesEnabled) && (
         <div className="mode-badges">
-          {isUltimate   && <span className="mode-badge mode-badge-ultimate">⊞ Ultimate</span>}
-          {hasTimer     && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
-          {hasRandom    && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
+          {hasTimer      && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
+          {hasRandom     && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
           {gameState.abilitiesEnabled && <span className="mode-badge mode-badge-ability">⚡ Abilità</span>}
         </div>
       )}
@@ -354,11 +261,7 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
         {selectingAbility ? "Seleziona una cella…" : message}
       </div>
 
-      {activeSubMsg && (
-        <div className="ultimate-active-hint">{activeSubMsg}</div>
-      )}
-
-      {myAbilities && isMyTurn && !isFinished && !isUltimate && (
+      {myAbilities && isMyTurn && !isFinished && (
         <div className="abilities-panel">
           <AbilityButton icon="🔄" label="Scambia" uses={myAbilities.scambia ?? 1}
             onClick={() => handleAbilityClick("scambia")}
@@ -372,26 +275,16 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
         </div>
       )}
 
-      {/* Board: normale vs Ultimate */}
-      {isUltimate ? (
-        <UltimateTTTBoard
-          gameState={gameState}
-          onCellClick={handleCellClick}
-          disabled={!isMyTurn}
-          myId={socket.id}
-        />
-      ) : (
-        <TicTacToeBoard
-          board={gameState.board}
-          winLine={gameState.winLine}
-          onCellClick={handleCellClick}
-          disabled={!isMyTurn && !selectingAbility}
-          deviationAnim={deviationAnim}
-          selectingAbility={selectingAbility}
-          gameState={gameState}
-          myId={socket.id}
-        />
-      )}
+      <TicTacToeBoard
+        board={gameState.board}
+        winLine={gameState.winLine}
+        onCellClick={handleCellClick}
+        disabled={!isMyTurn && !selectingAbility}
+        deviationAnim={deviationAnim}
+        selectingAbility={selectingAbility}
+        gameState={gameState}
+        myId={socket.id}
+      />
 
       {isFinished && (
         <div className="game-over-actions">
@@ -399,6 +292,9 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
           <button className="btn btn-ghost"   onClick={() => onLeave("home")}>⌂ Home</button>
         </div>
       )}
+
+      {/* Chat — solo in multiplayer */}
+      {!isBot && <ChatBox myId={socket.id} />}
     </div>
   );
 }

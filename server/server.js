@@ -1,5 +1,5 @@
 // ============================================================
-// server.js — Timer + Random + Abilità + Punteggio + Bot + GridSize + Ultimate
+// server.js — Timer + Random + Abilità + Punteggio + Bot + Griglie + Chat
 // ============================================================
 const express = require("express");
 const http = require("http");
@@ -82,15 +82,7 @@ function scheduleBotMove(roomCode) {
     if (room.gameState.currentTurn !== room.botId) return;
 
     const botPlayer = room.gameState.players.find(p => p.id === room.botId);
-    const gridSize  = room.gameState.gridSize || room.gameState.mode === "ultimate" ? "ultimate" : 3;
-
-    const moveIndex = getBotMove(
-      room.gameState.mode === "ultimate" ? [] : room.gameState.board,
-      room.botDifficulty,
-      botPlayer.symbol,
-      room.gameState.mode === "ultimate" ? "ultimate" : room.gameState.gridSize,
-      room.gameState
-    );
+    const moveIndex = getBotMove(room.gameState.board, room.botDifficulty, botPlayer.symbol, room.gameState.gridSize);
     if (moveIndex === null) return;
 
     const result = handleMove(room.gameState, room.botId, moveIndex);
@@ -106,7 +98,7 @@ function scheduleBotMove(roomCode) {
     const humanSocket = io.sockets.sockets.get(room.humanId);
     if (humanSocket) {
       humanSocket.emit("game_update", {
-        gameState: injectScore(room.gameState, room),
+        gameState: injectScore(buildClientState(room.gameState, room.humanId), room),
         deviated: result.deviated,
         intendedIndex: result.intendedIndex,
         actualIndex: result.actualIndex,
@@ -150,14 +142,7 @@ io.on("connection", (socket) => {
   });
 
   // ── Crea stanza bot ────────────────────────────────────────
-  socket.on("create_bot_room", ({
-    playerName,
-    difficulty = "easy",
-    timerSeconds = 0,
-    randomChance = 0,
-    abilitiesEnabled = false,
-    gridSize = 3,
-  }) => {
+  socket.on("create_bot_room", ({ playerName, difficulty = "easy", timerSeconds = 0, randomChance = 0, abilitiesEnabled = false, gridSize = 3 }) => {
     const BOT_ID = `bot_${Date.now()}`;
     const human = { id: socket.id, name: playerName || "Guest", isHost: true };
     const bot   = { id: BOT_ID, name: "🤖 Bot", isHost: false };
@@ -184,8 +169,7 @@ io.on("connection", (socket) => {
       botDifficulty: difficulty,
     });
 
-    const modeLabel = gridSize === "ultimate" ? "Ultimate" : `${gridSize}x${gridSize}`;
-    console.log(`[BOT] Partita vs bot avviata in ${room.code} — difficoltà: ${difficulty} — modalità: ${modeLabel}`);
+    console.log(`[BOT] Partita vs bot avviata in ${room.code} — difficoltà:${difficulty} griglia:${gridSize}x${gridSize}`);
 
     if (room.gameState.currentTurn === BOT_ID) {
       scheduleBotMove(room.code);
@@ -194,12 +178,7 @@ io.on("connection", (socket) => {
     }
   });
 
-  socket.on("start_game", ({
-    timerSeconds = 0,
-    randomChance = 0,
-    abilitiesEnabled = false,
-    gridSize = 3,
-  } = {}) => {
+  socket.on("start_game", ({ timerSeconds = 0, randomChance = 0, abilitiesEnabled = false, gridSize = 3 } = {}) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
     if (!room) return;
@@ -222,8 +201,7 @@ io.on("connection", (socket) => {
       }
     });
 
-    const modeLabel = gridSize === "ultimate" ? "Ultimate" : `${gridSize}x${gridSize}`;
-    console.log(`[GAME] Avviata in ${code} — timer:${timerSeconds}s random:${randomChance} abilità:${abilitiesEnabled} modalità:${modeLabel}`);
+    console.log(`[GAME] Avviata in ${code} — timer:${timerSeconds}s random:${randomChance} griglia:${gridSize}x${gridSize}`);
     if (timerSeconds > 0) startTurnTimer(code);
   });
 
@@ -277,7 +255,9 @@ io.on("connection", (socket) => {
     const room = getRoom(code);
     if (!room || room.status !== "playing") return;
 
-    const result = handleAbility(room.gameState, socket.id, abilityName, { targetIndex, index });
+    const payload = { targetIndex, index };
+    const result = handleAbility(room.gameState, socket.id, abilityName, payload);
+
     if (result.error) { socket.emit("error", { message: result.error }); return; }
 
     clearTurnTimer(code);
@@ -289,7 +269,8 @@ io.on("connection", (socket) => {
 
     if (room.isBot) {
       socket.emit("ability_used", {
-        playerId: socket.id, abilityName,
+        playerId: socket.id,
+        abilityName,
         gameState: injectScore(room.gameState, room),
       });
     } else {
@@ -297,7 +278,8 @@ io.on("connection", (socket) => {
         const clientSocket = io.sockets.sockets.get(p.id);
         if (clientSocket) {
           clientSocket.emit("ability_used", {
-            playerId: socket.id, abilityName,
+            playerId: socket.id,
+            abilityName,
             gameState: injectScore(buildClientState(room.gameState, p.id), room),
           });
         }
@@ -313,6 +295,24 @@ io.on("connection", (socket) => {
     }
   });
 
+  // ── Chat ───────────────────────────────────────────────────
+  socket.on("send_message", ({ text }) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    const room = getRoom(code);
+    if (!room || room.isBot) return; // niente chat vs bot
+
+    const trimmed = text?.trim();
+    if (!trimmed || trimmed.length > 200) return;
+
+    io.to(code).emit("new_message", {
+      playerId:   socket.id,
+      playerName: socket.data.playerName || "Guest",
+      text:       trimmed,
+      timestamp:  Date.now(),
+    });
+  });
+
   socket.on("request_rematch", () => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
@@ -323,14 +323,8 @@ io.on("connection", (socket) => {
       const human  = room.players.find(p => p.id === room.humanId);
       const bot    = room.players.find(p => p.id === room.botId);
       const prevGs = room.gameState;
-      room.status  = "playing";
-      room.gameState = initGame(
-        [human, bot],
-        prevGs.timerSeconds,
-        prevGs.randomChance,
-        prevGs.abilitiesEnabled,
-        prevGs.gridSize || (prevGs.mode === "ultimate" ? "ultimate" : 3)
-      );
+      room.status = "playing";
+      room.gameState = initGame([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.abilitiesEnabled, prevGs.gridSize);
 
       socket.emit("game_started", {
         gameState: injectScore(room.gameState, room),
