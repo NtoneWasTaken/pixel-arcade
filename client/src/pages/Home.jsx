@@ -1,58 +1,70 @@
 // ============================================================
-// pages/Home.jsx — Schermata iniziale: crea, entra, o gioca vs bot
+// pages/Home.jsx — Nome (step 1) oppure Azioni gioco (step 3)
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
 
 const TIMER_OPTIONS = [
-  { label: "Nessun timer", value: 0 },
+  { label: "Nessun timer", value: 0  },
   { label: "10 secondi",   value: 10 },
-  { label: "5 secondi",    value: 5 },
+  { label: "5 secondi",    value: 5  },
 ];
 
 const RANDOM_OPTIONS = [
-  { label: "Disattivato", value: 0 },
+  { label: "Disattivato", value: 0   },
   { label: "Leggero",     value: 0.2 },
   { label: "Caotico",     value: 0.4 },
   { label: "Anarchia",    value: 0.6 },
 ];
 
 const GRID_OPTIONS = [
-  { label: "3×3",      value: 3,          desc: "Classico" },
-  { label: "4×4",      value: 4,          desc: "4 in fila" },
-  { label: "5×5",      value: 5,          desc: "4 in fila" },
-  { label: "Ultimate", value: "ultimate", desc: "9 griglie" },
+  { label: "3×3", value: 3, desc: "Classico"   },
+  { label: "4×4", value: 4, desc: "Strategico" },
+  { label: "5×5", value: 5, desc: "Epico"      },
 ];
 
-export default function Home({ onRoomJoined, onBotGame }) {
-  const [playerName, setPlayerName] = useState("");
-  const [joinCode, setJoinCode]     = useState("");
-  const [mode, setMode]             = useState(null);
-  const [error, setError]           = useState("");
-  const [loading, setLoading]       = useState(false);
+export default function Home({ onNameConfirmed, onRoomJoined, onBotGame, onBack, playerName: initialName, selectedGame }) {
+  // Step 1: solo nome
+  const isNameStep = !!onNameConfirmed;
 
-  const [botDifficulty, setBotDifficulty] = useState("easy");
-  const [botTimer,      setBotTimer]      = useState(0);
-  const [botRandom,     setBotRandom]     = useState(0);
-  const [botAbilities,  setBotAbilities]  = useState(false);
-  const [botGridSize,   setBotGridSize]   = useState(3);
+  const [playerName,       setPlayerName]       = useState(initialName || "");
+  const [joinCode,         setJoinCode]         = useState("");
+  const [mode,             setMode]             = useState(null);
+  const [error,            setError]            = useState("");
+  const [loading,          setLoading]          = useState(false);
 
-  const isUltimate = botGridSize === "ultimate";
+  // Bot settings
+  const [botDifficulty,    setBotDifficulty]    = useState("easy");
+  const [botTimer,         setBotTimer]         = useState(0);
+  const [botRandom,        setBotRandom]        = useState(0);
+  const [botAbilities,     setBotAbilities]     = useState(false);
+  const [botGridSize,      setBotGridSize]      = useState(3);
 
   useEffect(() => {
+    if (isNameStep) return; // step 1: nessun listener socket
+
     const handleRoomCreated = ({ roomCode, player }) => {
       setLoading(false);
       onRoomJoined({ roomCode, player, isHost: true });
     };
+
     const handlePlayerJoined = ({ room }) => {
       setLoading(false);
       const me = room.players[room.players.length - 1];
       onRoomJoined({ roomCode: room.code, player: { ...me, isHost: false }, isHost: false, room });
     };
+
     const handleGameStarted = ({ gameState, isBot, botDifficulty: diff }) => {
-      if (isBot) { setLoading(false); onBotGame({ gameState, botDifficulty: diff }); }
+      if (isBot) {
+        setLoading(false);
+        onBotGame({ gameState, botDifficulty: diff });
+      }
     };
-    const handleError = ({ message }) => { setLoading(false); setError(message); };
+
+    const handleError = ({ message }) => {
+      setLoading(false);
+      setError(message);
+    };
 
     socket.on("room_created",  handleRoomCreated);
     socket.on("player_joined", handlePlayerJoined);
@@ -65,59 +77,86 @@ export default function Home({ onRoomJoined, onBotGame }) {
       socket.off("game_started",  handleGameStarted);
       socket.off("error",         handleError);
     };
-  }, [onRoomJoined, onBotGame]);
+  }, [isNameStep, onRoomJoined, onBotGame]);
 
-  const handleCreate = () => {
+  // ── Step 1: conferma nome ──────────────────────────────────
+  const handleConfirmName = () => {
     if (!playerName.trim()) { setError("Inserisci il tuo nome!"); return; }
+    onNameConfirmed(playerName.trim());
+  };
+
+  // ── Step 3: azioni stanza ─────────────────────────────────
+  const handleCreate = () => {
     setError(""); setLoading(true);
-    socket.emit("create_room", { playerName: playerName.trim() });
+    socket.emit("create_room", { playerName });
   };
 
   const handleJoin = () => {
-    if (!playerName.trim()) { setError("Inserisci il tuo nome!"); return; }
-    if (!joinCode.trim())   { setError("Inserisci il codice stanza!"); return; }
+    if (!joinCode.trim()) { setError("Inserisci il codice stanza!"); return; }
     setError(""); setLoading(true);
-    socket.emit("join_room", { roomCode: joinCode.trim().toUpperCase(), playerName: playerName.trim() });
+    socket.emit("join_room", { roomCode: joinCode.trim().toUpperCase(), playerName });
   };
 
   const handleBotStart = () => {
-    if (!playerName.trim()) { setError("Inserisci il tuo nome!"); return; }
     setError(""); setLoading(true);
     socket.emit("create_bot_room", {
-      playerName:       playerName.trim(),
+      playerName,
       difficulty:       botDifficulty,
       timerSeconds:     botTimer,
       randomChance:     botRandom,
-      abilitiesEnabled: isUltimate ? false : botAbilities,
+      abilitiesEnabled: botAbilities,
       gridSize:         botGridSize,
     });
   };
 
+  // ── Render Step 1 ─────────────────────────────────────────
+  if (isNameStep) {
+    return (
+      <div className="home-page">
+        <div className="home-hero">
+          <div className="hero-badge">MULTIPLAYER</div>
+          <h1 className="hero-title">
+            <span className="title-accent">PIXEL</span>
+            <span className="title-main">ARCADE</span>
+          </h1>
+          <p className="hero-sub">Giochi in tempo reale · Nessuna registrazione</p>
+        </div>
+
+        <div className="home-card">
+          <div className="input-group">
+            <label className="input-label">Il tuo nome</label>
+            <input
+              className="input-field"
+              type="text"
+              placeholder="es. Player1"
+              value={playerName}
+              maxLength={16}
+              onChange={(e) => setPlayerName(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && handleConfirmName()}
+              autoFocus
+            />
+          </div>
+          {error && <div className="error-msg">⚠ {error}</div>}
+          <button className="btn btn-primary" onClick={handleConfirmName}>
+            Continua →
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Render Step 3 (game_actions) ──────────────────────────
   return (
     <div className="home-page">
       <div className="home-hero">
-        <div className="hero-badge">MULTIPLAYER</div>
-        <h1 className="hero-title">
-          <span className="title-accent">PIXEL</span>
-          <span className="title-main">ARCADE</span>
-        </h1>
-        <p className="hero-sub">Giochi in tempo reale · Nessuna registrazione</p>
+        <button className="btn btn-ghost btn-sm back-btn" onClick={onBack}>← Giochi</button>
+        <p className="game-actions-title">
+          {selectedGame === "ttt" ? "TIC TAC TOE" : "CONNECT 4"}
+        </p>
+        <p className="hero-sub">Ciao, <strong>{playerName}</strong>!</p>
       </div>
 
       <div className="home-card">
-        <div className="input-group">
-          <label className="input-label">Il tuo nome</label>
-          <input
-            className="input-field"
-            type="text"
-            placeholder="es. Player1"
-            value={playerName}
-            maxLength={16}
-            onChange={(e) => setPlayerName(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && mode === "join" && handleJoin()}
-          />
-        </div>
-
         {!mode && (
           <div className="action-buttons">
             <button className="btn btn-primary"   onClick={() => setMode("create")}>✦ Crea Stanza</button>
@@ -163,50 +202,33 @@ export default function Home({ onRoomJoined, onBotGame }) {
 
         {mode === "bot" && (
           <div className="mode-section">
-
-            {/* Difficoltà */}
             <div className="bot-option-group">
               <p className="bot-option-label">🤖 Difficoltà</p>
               <div className="bot-difficulty-btns">
-                <button className={`btn ${botDifficulty === "easy" ? "btn-primary" : "btn-ghost"}`}
-                  onClick={() => setBotDifficulty("easy")}>😊 Facile</button>
-                {!isUltimate && (
-                  <button className={`btn ${botDifficulty === "hard" ? "btn-primary" : "btn-ghost"}`}
-                    onClick={() => setBotDifficulty("hard")}>💀 Difficile</button>
-                )}
+                <button className={`btn ${botDifficulty === "easy" ? "btn-primary" : "btn-ghost"}`} onClick={() => setBotDifficulty("easy")}>😊 Facile</button>
+                <button className={`btn ${botDifficulty === "hard" ? "btn-primary" : "btn-ghost"}`} onClick={() => setBotDifficulty("hard")}>💀 Difficile</button>
               </div>
-              {botDifficulty === "hard" && !isUltimate && botGridSize === 3 && (
+              {botDifficulty === "hard" && (
                 <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale — non si può battere!</p>
               )}
-              {botDifficulty === "hard" && !isUltimate && botGridSize > 3 && (
-                <p className="bot-hard-warning">⚠️ Il bot usa strategia avanzata su griglia {botGridSize}×{botGridSize}.</p>
-              )}
-              {isUltimate && (
-                <p className="bot-hard-warning">🧠 In modalità Ultimate il bot gioca casuale.</p>
-              )}
             </div>
 
-            {/* Modalità di gioco */}
-            <div className="bot-option-group">
-              <p className="bot-option-label">⊞ Modalità di gioco</p>
-              <div className="timer-options">
-                {GRID_OPTIONS.map(opt => (
-                  <button key={opt.value}
-                    className={`timer-option ${botGridSize === opt.value ? "selected" : ""} ${opt.value === "ultimate" ? "timer-option-ultimate" : ""}`}
-                    onClick={() => { setBotGridSize(opt.value); if (opt.value === "ultimate") setBotDifficulty("easy"); }}>
-                    <span className="timer-icon">{opt.label}</span>
-                    <span className="timer-label">{opt.desc}</span>
-                  </button>
-                ))}
+            {selectedGame === "ttt" && (
+              <div className="bot-option-group">
+                <p className="bot-option-label">🔲 Griglia</p>
+                <div className="timer-options">
+                  {GRID_OPTIONS.map(opt => (
+                    <button key={opt.value}
+                      className={`timer-option ${botGridSize === opt.value ? "selected" : ""}`}
+                      onClick={() => setBotGridSize(opt.value)}>
+                      <span className="timer-icon">{opt.label}</span>
+                      <span className="timer-label">{opt.desc}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              {isUltimate && (
-                <p className="ultimate-hint">
-                  🧠 Dove giochi determina dove gioca l'avversario!
-                </p>
-              )}
-            </div>
+            )}
 
-            {/* Timer */}
             <div className="bot-option-group">
               <p className="bot-option-label">⏱ Timer</p>
               <div className="timer-options">
@@ -220,7 +242,6 @@ export default function Home({ onRoomJoined, onBotGame }) {
               </div>
             </div>
 
-            {/* Random */}
             <div className="bot-option-group">
               <p className="bot-option-label">🎲 Random</p>
               <div className="timer-options">
@@ -234,8 +255,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
               </div>
             </div>
 
-            {/* Abilità — nascoste in Ultimate */}
-            {!isUltimate && (
+            {selectedGame === "ttt" && (
               <div className="bot-option-group">
                 <button
                   className={`ability-toggle ${botAbilities ? "enabled" : ""}`}
@@ -256,12 +276,6 @@ export default function Home({ onRoomJoined, onBotGame }) {
         )}
 
         {error && <div className="error-msg">⚠ {error}</div>}
-      </div>
-
-      <div className="games-preview">
-        <div className="game-chip active">Tic Tac Toe</div>
-        <div className="game-chip soon">Connect 4 · presto</div>
-        <div className="game-chip soon">Battleship · presto</div>
       </div>
     </div>
   );

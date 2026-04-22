@@ -1171,3 +1171,186 @@ html, body, #root {
 }
 .chat-send-btn:hover:not(:disabled) { background: rgba(0, 212, 255, 0.08); }
 .chat-send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* ============================================================
+   GAME SELECT PAGE
+   ============================================================ */
+.game-select-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 32px;
+  width: 100%;
+  max-width: 500px;
+  padding-top: 32px;
+}
+
+.game-select-hero {
+  text-align: center;
+}
+
+.game-select-welcome {
+  margin-top: 10px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+
+.player-name-accent {
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.game-select-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* ── Card gioco ─────────────────────────────────────────── */
+.game-card {
+  width: 100%;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  text-align: left;
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.game-card:hover {
+  transform: translateY(-2px);
+}
+
+.game-card-ttt:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 0 20px rgba(0, 212, 255, 0.15);
+}
+
+.game-card-c4:hover {
+  border-color: var(--gold);
+  box-shadow: 0 0 20px rgba(245, 197, 24, 0.15);
+}
+
+/* Preview griglia */
+.game-card-preview {
+  display: flex;
+  justify-content: center;
+}
+
+/* Preview Tris 3x3 */
+.ttt-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 4px;
+  width: 80px;
+}
+
+.ttt-pre {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.85rem;
+  font-weight: 900;
+  border-radius: 3px;
+  background: var(--surface2);
+}
+
+.ttt-pre.x     { color: var(--x-color); }
+.ttt-pre.o     { color: var(--o-color); }
+.ttt-pre.empty { opacity: 0.2; }
+
+/* Preview Connect 4 7x6 */
+.c4-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+  width: 140px;
+}
+
+.c4-pre {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+}
+
+.c4-pre-empty { background: var(--surface2); opacity: 0.35; }
+.c4-pre-r     { background: #ff6b6b; box-shadow: 0 0 6px rgba(255,107,107,0.5); }
+.c4-pre-y     { background: var(--gold); box-shadow: 0 0 6px rgba(245,197,24,0.5); }
+
+/* Info testo */
+.game-card-info {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.game-card-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: var(--text);
+}
+
+.game-card-ttt .game-card-title { color: var(--cyan); }
+.game-card-c4  .game-card-title { color: var(--gold); }
+
+.game-card-desc {
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.game-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.game-tag {
+  font-size: 0.6rem;
+  padding: 3px 8px;
+  border-radius: 20px;
+  border: 1px solid var(--border2);
+  color: var(--text-dim);
+  letter-spacing: 0.06em;
+}
+
+/* CTA in basso a destra */
+.game-card-cta {
+  font-family: var(--font-display);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  text-align: right;
+  transition: color 0.2s;
+}
+
+.game-card-ttt:hover .game-card-cta { color: var(--cyan); }
+.game-card-c4:hover  .game-card-cta { color: var(--gold); }
+
+/* ── Home step 3 (game_actions) ─────────────────────────── */
+.back-btn {
+  align-self: flex-start;
+  margin-bottom: 4px;
+}
+
+.game-actions-title {
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  color: var(--cyan);
+  text-align: center;
+}
