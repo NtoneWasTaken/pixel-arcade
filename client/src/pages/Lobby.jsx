@@ -3,6 +3,7 @@
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
+import ChatBox from "../components/ChatBox";
 
 const TIMER_OPTIONS = [
   { label: "Nessun timer", value: 0, icon: "∞" },
@@ -253,6 +254,8 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
           <p className="waiting-msg">In attesa che l&apos;host avvii la partita…</p>
         )}
       </div>
+
+      <ChatBox roomCode={roomCode} />
     </div>
   );
 }

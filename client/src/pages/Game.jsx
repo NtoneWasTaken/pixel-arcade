@@ -4,6 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
 import TicTacToeBoard from "../components/TicTacToeBoard";
+import ChatBox from "../components/ChatBox";
 
 // ── TimerBar ─────────────────────────────────────────────────
 function TimerBar({ timerSeconds, turnStartedAt, currentTurn, myId }) {
@@ -399,6 +400,8 @@ export default function Game({ initialGameState, player, roomCode, isBot = false
           <button className="btn btn-ghost"   onClick={() => onLeave("home")}>⌂ Home</button>
         </div>
       )}
+
+      {!isBot && <ChatBox roomCode={roomCode} />}
     </div>
   );
 }

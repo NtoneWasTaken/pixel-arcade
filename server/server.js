@@ -350,6 +350,21 @@ io.on("connection", (socket) => {
     }
   });
 
+  socket.on("chat_message", ({ text }) => {
+    const code = socket.data.roomCode;
+    if (!code) return;
+    const room = getRoom(code);
+    if (!room) return;
+    const sanitized = String(text || "").trim().slice(0, 200);
+    if (!sanitized) return;
+    io.to(code).emit("chat_message", {
+      senderId:   socket.id,
+      senderName: socket.data.playerName || "Guest",
+      text:       sanitized,
+      ts:         Date.now(),
+    });
+  });
+
   socket.on("disconnect", () => {
     const code = socket.data.roomCode;
     if (!code) return;
