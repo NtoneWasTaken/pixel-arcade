@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Timer + Random + Abilità + Griglia + Chat
+// pages/Lobby.jsx — Tris + Connect 4
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -24,30 +24,27 @@ const GRID_OPTIONS = [
   { label: "5×5", value: 5, desc: "Epico"      },
 ];
 
-// ── ScoreDisplay ─────────────────────────────────────────────
 function ScoreDisplay({ room, myId }) {
   const players = room?.players || [];
   const score   = room?.score   || {};
-
-  const me  = players.find((p) => p.id === myId);
-  const opp = players.find((p) => p.id !== myId);
-
+  const me  = players.find(p => p.id === myId);
+  const opp = players.find(p => p.id !== myId);
   const myScore  = score[myId]    ?? 0;
   const oppScore = score[opp?.id] ?? 0;
 
-  const prevMyScore  = useRef(myScore);
-  const prevOppScore = useRef(oppScore);
+  const prevMy  = useRef(myScore);
+  const prevOpp = useRef(oppScore);
   const [myGlow,  setMyGlow]  = useState(false);
   const [oppGlow, setOppGlow] = useState(false);
 
   useEffect(() => {
-    if (myScore > prevMyScore.current) { setMyGlow(true); setTimeout(() => setMyGlow(false), 900); }
-    prevMyScore.current = myScore;
+    if (myScore > prevMy.current) { setMyGlow(true); setTimeout(() => setMyGlow(false), 900); }
+    prevMy.current = myScore;
   }, [myScore]);
 
   useEffect(() => {
-    if (oppScore > prevOppScore.current) { setOppGlow(true); setTimeout(() => setOppGlow(false), 900); }
-    prevOppScore.current = oppScore;
+    if (oppScore > prevOpp.current) { setOppGlow(true); setTimeout(() => setOppGlow(false), 900); }
+    prevOpp.current = oppScore;
   }, [oppScore]);
 
   if (players.length < 2) return null;
@@ -69,7 +66,7 @@ function ScoreDisplay({ room, myId }) {
   );
 }
 
-export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLeave }) {
+export default function Lobby({ roomCode, player, initialRoom, selectedGame, onGameStart, onLeave }) {
   const [room,             setRoom]             = useState(initialRoom || { players: [player], code: roomCode });
   const [error,            setError]            = useState("");
   const [copied,           setCopied]           = useState(false);
@@ -78,9 +75,11 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
   const [abilitiesEnabled, setAbilitiesEnabled] = useState(false);
   const [gridSize,         setGridSize]         = useState(3);
 
+  const isC4 = selectedGame === "c4";
+
   useEffect(() => {
     const handlePlayerJoined = ({ room: r }) => setRoom(r);
-    const handleGameStarted  = ({ gameState }) => onGameStart(gameState);
+    const handleGameStarted  = ({ gameState, gameType }) => onGameStart(gameState, gameType);
     const handlePlayerLeft   = ({ room: r, message }) => { setRoom(r); setError(message); };
     const handleError        = ({ message }) => setError(message);
 
@@ -99,7 +98,11 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
   const handleStart = () => {
     setError("");
-    socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize });
+    if (isC4) {
+      socket.emit("start_game_c4", { timerSeconds, randomChance });
+    } else {
+      socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize });
+    }
   };
 
   const copyCode = () => {
@@ -116,7 +119,7 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
     <div className="lobby-page">
       <div className="lobby-header">
         <button className="btn btn-ghost btn-sm" onClick={onLeave}>← Esci</button>
-        <h2 className="lobby-title">LOBBY</h2>
+        <h2 className="lobby-title">{isC4 ? "CONNECT 4" : "TIC TAC TOE"}</h2>
         <div />
       </div>
 
@@ -140,7 +143,9 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
         <div className="players-list">
           {room.players.map((p, i) => (
             <div key={p.id} className={`player-slot filled ${p.id === socket.id ? "me" : ""}`}>
-              <span className="player-symbol">{i === 0 ? "✕" : "◯"}</span>
+              <span className="player-symbol">
+                {isC4 ? (i === 0 ? "🔴" : "🟡") : (i === 0 ? "✕" : "◯")}
+              </span>
               <span className="player-name">{p.name}</span>
               <span className="player-badges">
                 {p.isHost && <span className="badge">Host</span>}
@@ -159,24 +164,28 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
 
       {isHost ? (
         <>
-          <div className="timer-section">
-            <h3 className="section-title">🔲 Griglia</h3>
-            <div className="timer-options">
-              {GRID_OPTIONS.map((opt) => (
-                <button key={opt.value}
-                  className={`timer-option ${gridSize === opt.value ? "selected" : ""}`}
-                  onClick={() => setGridSize(opt.value)}>
-                  <span className="timer-icon">{opt.label}</span>
-                  <span className="timer-label">{opt.desc}</span>
-                </button>
-              ))}
+          {/* Griglia — solo Tris */}
+          {!isC4 && (
+            <div className="timer-section">
+              <h3 className="section-title">🔲 Griglia</h3>
+              <div className="timer-options">
+                {GRID_OPTIONS.map(opt => (
+                  <button key={opt.value}
+                    className={`timer-option ${gridSize === opt.value ? "selected" : ""}`}
+                    onClick={() => setGridSize(opt.value)}>
+                    <span className="timer-icon">{opt.label}</span>
+                    <span className="timer-label">{opt.desc}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
+          {/* Timer */}
           <div className="timer-section">
             <h3 className="section-title">⏱ Modalità Timer</h3>
             <div className="timer-options">
-              {TIMER_OPTIONS.map((opt) => (
+              {TIMER_OPTIONS.map(opt => (
                 <button key={opt.value}
                   className={`timer-option ${timerSeconds === opt.value ? "selected" : ""}`}
                   onClick={() => setTimerSeconds(opt.value)}>
@@ -187,10 +196,11 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
             </div>
           </div>
 
+          {/* Random */}
           <div className="timer-section">
             <h3 className="section-title">🎲 Modalità Random</h3>
             <div className="timer-options">
-              {RANDOM_OPTIONS.map((opt) => (
+              {RANDOM_OPTIONS.map(opt => (
                 <button key={opt.value}
                   className={`timer-option ${randomChance === opt.value ? "selected" : ""}`}
                   onClick={() => setRandomChance(opt.value)}>
@@ -201,20 +211,23 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
             </div>
           </div>
 
-          <div className="timer-section">
-            <h3 className="section-title">⚡ Abilità Speciali</h3>
-            <div className="abilities-preview">
-              <div className="ability-preview-item"><span>🔄</span><span>Scambia</span></div>
-              <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
-              <div className="ability-preview-item"><span>👁️</span><span>Fantasma</span></div>
+          {/* Abilità — solo Tris */}
+          {!isC4 && (
+            <div className="timer-section">
+              <h3 className="section-title">⚡ Abilità Speciali</h3>
+              <div className="abilities-preview">
+                <div className="ability-preview-item"><span>🔄</span><span>Scambia</span></div>
+                <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
+                <div className="ability-preview-item"><span>👁️</span><span>Fantasma</span></div>
+              </div>
+              <button
+                className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`}
+                onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
+              >
+                {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
+              </button>
             </div>
-            <button
-              className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`}
-              onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
-            >
-              {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
-            </button>
-          </div>
+          )}
         </>
       ) : (
         <div className="timer-section">
@@ -238,7 +251,6 @@ export default function Lobby({ roomCode, player, initialRoom, onGameStart, onLe
         )}
       </div>
 
-      {/* Chat — visibile solo quando ci sono 2 giocatori */}
       {hasTwo && <ChatBox myId={socket.id} />}
     </div>
   );

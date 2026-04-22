@@ -1189,10 +1189,160 @@ html, body, #root {
 }
 
 /* ============================================================
-   HOME — Card giochi preview + selezione inline
+   CONNECT 4
    ============================================================ */
 
-/* Preview card piccole nello step nome */
+.c4-board-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 420px;
+}
+
+/* Pulsanti colonna invisibili sopra la griglia */
+.c4-col-indicators {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  width: 100%;
+  gap: 4px;
+}
+
+.c4-col-btn {
+  height: 28px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.c4-col-btn.hovered { background: rgba(255,255,255,0.06); }
+.c4-col-btn.disabled { cursor: not-allowed; }
+.c4-col-btn.c4-intended { background: rgba(255,68,68,0.15); }
+.c4-col-btn.c4-actual   { background: rgba(245,197,24,0.15); }
+
+.c4-drop-indicator {
+  font-size: 0.8rem;
+  animation: bounce-drop 0.5s ease infinite alternate;
+}
+.indicator-r { color: #ff6b6b; }
+.indicator-y { color: var(--gold); }
+
+@keyframes bounce-drop {
+  from { transform: translateY(-2px); }
+  to   { transform: translateY(2px); }
+}
+
+/* Griglia */
+.c4-board {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  grid-template-rows: repeat(6, 1fr);
+  gap: 4px;
+  width: 100%;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: 10px;
+  padding: 8px;
+}
+
+.c4-cell {
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 2px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.c4-cell.c4-cell-hover-col {
+  border-color: var(--border2);
+  background: rgba(255,255,255,0.04);
+}
+
+.c4-cell.c4-cell-win {
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(245,197,24,0.5);
+  animation: win-pulse 0.6s ease;
+}
+
+/* Pedina */
+.c4-piece {
+  width: 82%;
+  height: 82%;
+  border-radius: 50%;
+  transition: transform 0.1s;
+}
+
+.piece-r {
+  background: radial-gradient(circle at 35% 35%, #ff9999, #ff4444);
+  box-shadow: inset -2px -2px 4px rgba(0,0,0,0.3), 0 0 8px rgba(255,68,68,0.4);
+}
+
+.piece-y {
+  background: radial-gradient(circle at 35% 35%, #ffe066, #f5c518);
+  box-shadow: inset -2px -2px 4px rgba(0,0,0,0.3), 0 0 8px rgba(245,197,24,0.4);
+}
+
+.piece-win {
+  animation: piece-win-pulse 0.8s ease infinite alternate;
+}
+
+@keyframes piece-win-pulse {
+  from { transform: scale(0.92); box-shadow: inset -2px -2px 4px rgba(0,0,0,0.3), 0 0 8px rgba(245,197,24,0.4); }
+  to   { transform: scale(1.05); box-shadow: inset -2px -2px 4px rgba(0,0,0,0.3), 0 0 18px rgba(245,197,24,0.8); }
+}
+
+/* Animazione caduta */
+.piece-drop {
+  animation: piece-fall 0.35s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+@keyframes piece-fall {
+  0%   { transform: translateY(-120px) scale(0.8); opacity: 0.4; }
+  70%  { transform: translateY(4px) scale(1.05); opacity: 1; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* Numerazione colonne */
+.c4-col-numbers {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  width: 100%;
+  gap: 4px;
+}
+
+.c4-col-num {
+  text-align: center;
+  font-size: 0.6rem;
+  color: var(--text-dim);
+  opacity: 0.5;
+}
+
+/* Badge simbolo in header */
+.c4-symbol-badge {
+  font-size: 1.2rem;
+}
+
+/* Dot nel scoreboard */
+.c4-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.c4-dot-r { background: radial-gradient(circle at 35% 35%, #ff9999, #ff4444); box-shadow: 0 0 6px rgba(255,68,68,0.5); }
+.c4-dot-y { background: radial-gradient(circle at 35% 35%, #ffe066, #f5c518); box-shadow: 0 0 6px rgba(245,197,24,0.5); }
+
+/* ── Home preview mini ───────────────────────────────────── */
 .game-cards-hint {
   border-top: 1px solid var(--border);
   padding-top: 16px;
@@ -1200,7 +1350,6 @@ html, body, #root {
   flex-direction: column;
   gap: 10px;
 }
-
 .game-cards-hint-label {
   font-size: 0.6rem;
   letter-spacing: 0.15em;
@@ -1208,12 +1357,7 @@ html, body, #root {
   color: var(--text-dim);
   text-align: center;
 }
-
-.game-cards-preview-row {
-  display: flex;
-  gap: 10px;
-}
-
+.game-cards-preview-row { display: flex; gap: 10px; }
 .game-card-mini {
   flex: 1;
   background: var(--surface2);
@@ -1227,69 +1371,36 @@ html, body, #root {
   pointer-events: none;
   opacity: 0.7;
 }
-
 .game-card-mini-ttt { border-color: rgba(0,212,255,0.2); }
 .game-card-mini-c4  { border-color: rgba(245,197,24,0.2); }
-
 .game-card-mini-title {
   font-family: var(--font-display);
   font-size: 0.5rem;
   letter-spacing: 0.15em;
   color: var(--text-dim);
 }
-
-.ttt-preview-mini {
-  width: 54px !important;
-  gap: 3px !important;
-}
-
-.ttt-preview-mini .ttt-pre {
-  width: 16px !important;
-  height: 16px !important;
-  font-size: 0.6rem !important;
-}
-
+.ttt-preview-mini { width: 54px !important; gap: 3px !important; }
+.ttt-preview-mini .ttt-pre { width: 16px !important; height: 16px !important; font-size: 0.6rem !important; }
 .c4-preview-mini {
   display: grid;
   grid-template-columns: repeat(7, 1fr);
   gap: 2px;
   width: 98px;
 }
+.c4-preview-mini .c4-pre { width: 11px; height: 11px; border-radius: 50%; }
 
-.c4-preview-mini .c4-pre {
-  width: 11px;
-  height: 11px;
-  border-radius: 50%;
-}
+/* ── Game select ─────────────────────────────────────────── */
+.game-select-welcome { font-size: 0.85rem; color: var(--text-dim); text-align: center; }
+.player-name-accent  { color: var(--cyan); font-weight: 700; }
+.game-select-grid    { display: flex; flex-direction: column; gap: 16px; width: 100%; max-width: 400px; }
 
-/* Step selezione gioco */
-.game-select-welcome {
-  font-size: 0.85rem;
-  color: var(--text-dim);
-  text-align: center;
-}
-
-.player-name-accent {
-  color: var(--cyan);
-  font-weight: 700;
-}
-
-.game-select-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  width: 100%;
-  max-width: 400px;
-}
-
-/* Step azioni */
+/* ── Game actions header ─────────────────────────────────── */
 .game-actions-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 4px;
 }
-
 .game-actions-title {
   font-family: var(--font-display);
   font-size: 0.85rem;
@@ -1297,8 +1408,4 @@ html, body, #root {
   letter-spacing: 0.15em;
   color: var(--cyan);
 }
-
-.game-actions-player {
-  font-size: 0.7rem;
-  color: var(--text-dim);
-}
+.game-actions-player { font-size: 0.7rem; color: var(--text-dim); }
