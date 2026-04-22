@@ -866,173 +866,6 @@ html, body, #root {
   text-align: center;
 }
 
-/* ===========================================================
-   ULTIMATE TTT - STILI CSS
-   =========================================================== */
-
-/* Griglia esterna: 3x3 di sotto-griglie */
-.ultimate-board {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-  width: min(540px, 96vw);
-  margin: 0 auto;
-  padding: 6px;
-  background: rgba(255,255,255,0.04);
-  border-radius: 12px;
-  border: 2px solid rgba(255,255,255,0.1);
-}
-
-/* Singola sotto-griglia wrapper */
-.ultimate-sub-wrapper {
-  position: relative;
-  border-radius: 8px;
-  padding: 5px;
-  border: 2px solid rgba(255,255,255,0.08);
-  background: rgba(255,255,255,0.02);
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
-}
-
-/* Sotto-griglia attiva: evidenziata */
-.ultimate-sub-active {
-  border-color: rgba(99, 179, 237, 0.6) !important;
-  background: rgba(99, 179, 237, 0.06) !important;
-  box-shadow: 0 0 12px rgba(99, 179, 237, 0.2);
-}
-
-/* Sotto-griglia già conclusa */
-.ultimate-sub-done {
-  border-color: rgba(255,255,255,0.04) !important;
-  background: rgba(255,255,255,0.01) !important;
-}
-
-/* Sotto-griglia nella linea vincente */
-.ultimate-sub-win {
-  border-color: rgba(72, 187, 120, 0.6) !important;
-  box-shadow: 0 0 16px rgba(72, 187, 120, 0.3) !important;
-}
-
-/* Overlay vittoria sulla sotto-griglia */
-.ultimate-sub-overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 6px;
-  z-index: 2;
-  pointer-events: none;
-}
-
-.overlay-x {
-  background: rgba(99, 179, 237, 0.15);
-}
-
-.overlay-o {
-  background: rgba(252, 129, 74, 0.15);
-}
-
-.overlay-draw {
-  background: rgba(160, 160, 160, 0.12);
-}
-
-.overlay-x .symbol-x,
-.overlay-o .symbol-o,
-.overlay-draw span {
-  font-size: 2.2rem;
-  font-weight: 900;
-  opacity: 0.85;
-  line-height: 1;
-}
-
-/* Griglia interna 3x3 (le 9 celle della sotto-griglia) */
-.ultimate-sub-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 3px;
-}
-
-/* Singola cella della sotto-griglia */
-.ultimate-cell {
-  aspect-ratio: 1;
-  border: none;
-  border-radius: 4px;
-  background: rgba(255,255,255,0.04);
-  cursor: default;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background 0.15s;
-  padding: 0;
-  min-width: 0;
-}
-
-.ultimate-cell.cell-empty {
-  cursor: pointer;
-  background: rgba(255,255,255,0.07);
-}
-
-.ultimate-cell.cell-empty:hover {
-  background: rgba(99, 179, 237, 0.18);
-}
-
-.ultimate-cell.cell-x {
-  background: rgba(99, 179, 237, 0.12);
-}
-
-.ultimate-cell.cell-o {
-  background: rgba(252, 129, 74, 0.12);
-}
-
-.ultimate-symbol {
-  font-size: clamp(0.55rem, 2.5vw, 1rem);
-  font-weight: 900;
-  line-height: 1;
-}
-
-/* Hint sotto-griglia attiva */
-.ultimate-active-hint {
-  text-align: center;
-  font-size: 0.8rem;
-  color: rgba(99, 179, 237, 0.8);
-  margin: 4px 0 8px;
-  letter-spacing: 0.03em;
-}
-
-/* Badge Ultimate */
-.mode-badge-ultimate {
-  background: linear-gradient(135deg, rgba(159, 122, 234, 0.3), rgba(99, 179, 237, 0.3));
-  border-color: rgba(159, 122, 234, 0.5);
-  color: #d6bcfa;
-}
-
-/* Opzione Ultimate nel selettore griglia in Lobby/Home */
-.timer-option-ultimate {
-  border-color: rgba(159, 122, 234, 0.4) !important;
-}
-
-.timer-option-ultimate.selected {
-  background: rgba(159, 122, 234, 0.2) !important;
-  border-color: rgba(159, 122, 234, 0.8) !important;
-}
-
-/* Hint Ultimate in Lobby */
-.ultimate-hint {
-  font-size: 0.75rem;
-  color: rgba(159, 122, 234, 0.85);
-  margin-top: 8px;
-  text-align: center;
-  line-height: 1.4;
-}
-
-/* Sottolabel nelle timer-option (es. "9 griglie") */
-.timer-sublabel {
-  font-size: 0.6rem;
-  opacity: 0.6;
-  display: block;
-  margin-top: 1px;
-}
-
 /* ============================================================
    GRIGLIE DINAMICHE
    ============================================================ */
@@ -1353,4 +1186,119 @@ html, body, #root {
   letter-spacing: 0.2em;
   color: var(--cyan);
   text-align: center;
+}
+
+/* ============================================================
+   HOME — Card giochi preview + selezione inline
+   ============================================================ */
+
+/* Preview card piccole nello step nome */
+.game-cards-hint {
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.game-cards-hint-label {
+  font-size: 0.6rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.game-cards-preview-row {
+  display: flex;
+  gap: 10px;
+}
+
+.game-card-mini {
+  flex: 1;
+  background: var(--surface2);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  opacity: 0.7;
+}
+
+.game-card-mini-ttt { border-color: rgba(0,212,255,0.2); }
+.game-card-mini-c4  { border-color: rgba(245,197,24,0.2); }
+
+.game-card-mini-title {
+  font-family: var(--font-display);
+  font-size: 0.5rem;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+}
+
+.ttt-preview-mini {
+  width: 54px !important;
+  gap: 3px !important;
+}
+
+.ttt-preview-mini .ttt-pre {
+  width: 16px !important;
+  height: 16px !important;
+  font-size: 0.6rem !important;
+}
+
+.c4-preview-mini {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+  width: 98px;
+}
+
+.c4-preview-mini .c4-pre {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+}
+
+/* Step selezione gioco */
+.game-select-welcome {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  text-align: center;
+}
+
+.player-name-accent {
+  color: var(--cyan);
+  font-weight: 700;
+}
+
+.game-select-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  max-width: 400px;
+}
+
+/* Step azioni */
+.game-actions-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.game-actions-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 900;
+  letter-spacing: 0.15em;
+  color: var(--cyan);
+}
+
+.game-actions-player {
+  font-size: 0.7rem;
+  color: var(--text-dim);
 }

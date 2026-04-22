@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Home.jsx — Nome (step 1) oppure Azioni gioco (step 3)
+// pages/Home.jsx — Nome + selezione gioco + azioni stanza
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
@@ -23,13 +23,13 @@ const GRID_OPTIONS = [
   { label: "5×5", value: 5, desc: "Epico"      },
 ];
 
-export default function Home({ onNameConfirmed, onRoomJoined, onBotGame, onBack, playerName: initialName, selectedGame }) {
-  // Step 1: solo nome
-  const isNameStep = !!onNameConfirmed;
-
-  const [playerName,       setPlayerName]       = useState(initialName || "");
+export default function Home({ onRoomJoined, onBotGame }) {
+  const [playerName,       setPlayerName]       = useState("");
   const [joinCode,         setJoinCode]         = useState("");
-  const [mode,             setMode]             = useState(null);
+  // step: "name" | "select" | "actions"
+  const [step,             setStep]             = useState("name");
+  const [selectedGame,     setSelectedGame]     = useState(null); // "ttt" | "c4"
+  const [mode,             setMode]             = useState(null); // "create" | "join" | "bot"
   const [error,            setError]            = useState("");
   const [loading,          setLoading]          = useState(false);
 
@@ -41,30 +41,21 @@ export default function Home({ onNameConfirmed, onRoomJoined, onBotGame, onBack,
   const [botGridSize,      setBotGridSize]      = useState(3);
 
   useEffect(() => {
-    if (isNameStep) return; // step 1: nessun listener socket
+    if (step !== "actions") return;
 
     const handleRoomCreated = ({ roomCode, player }) => {
       setLoading(false);
       onRoomJoined({ roomCode, player, isHost: true });
     };
-
     const handlePlayerJoined = ({ room }) => {
       setLoading(false);
       const me = room.players[room.players.length - 1];
       onRoomJoined({ roomCode: room.code, player: { ...me, isHost: false }, isHost: false, room });
     };
-
-    const handleGameStarted = ({ gameState, isBot, botDifficulty: diff }) => {
-      if (isBot) {
-        setLoading(false);
-        onBotGame({ gameState, botDifficulty: diff });
-      }
+    const handleGameStarted = ({ gameState, isBot }) => {
+      if (isBot) { setLoading(false); onBotGame({ gameState }); }
     };
-
-    const handleError = ({ message }) => {
-      setLoading(false);
-      setError(message);
-    };
+    const handleError = ({ message }) => { setLoading(false); setError(message); };
 
     socket.on("room_created",  handleRoomCreated);
     socket.on("player_joined", handlePlayerJoined);
@@ -77,51 +68,61 @@ export default function Home({ onNameConfirmed, onRoomJoined, onBotGame, onBack,
       socket.off("game_started",  handleGameStarted);
       socket.off("error",         handleError);
     };
-  }, [isNameStep, onRoomJoined, onBotGame]);
+  }, [step, onRoomJoined, onBotGame]);
 
-  // ── Step 1: conferma nome ──────────────────────────────────
   const handleConfirmName = () => {
     if (!playerName.trim()) { setError("Inserisci il tuo nome!"); return; }
-    onNameConfirmed(playerName.trim());
+    setError("");
+    setStep("select");
   };
 
-  // ── Step 3: azioni stanza ─────────────────────────────────
+  const handleSelectGame = (game) => {
+    setSelectedGame(game);
+    setStep("actions");
+    setMode(null);
+    setError("");
+  };
+
   const handleCreate = () => {
     setError(""); setLoading(true);
-    socket.emit("create_room", { playerName });
+    socket.emit("create_room", { playerName: playerName.trim() });
   };
 
   const handleJoin = () => {
     if (!joinCode.trim()) { setError("Inserisci il codice stanza!"); return; }
     setError(""); setLoading(true);
-    socket.emit("join_room", { roomCode: joinCode.trim().toUpperCase(), playerName });
+    socket.emit("join_room", { roomCode: joinCode.trim().toUpperCase(), playerName: playerName.trim() });
   };
 
   const handleBotStart = () => {
     setError(""); setLoading(true);
     socket.emit("create_bot_room", {
-      playerName,
+      playerName:       playerName.trim(),
       difficulty:       botDifficulty,
       timerSeconds:     botTimer,
       randomChance:     botRandom,
       abilitiesEnabled: botAbilities,
-      gridSize:         botGridSize,
+      gridSize:         selectedGame === "ttt" ? botGridSize : 3,
     });
   };
 
-  // ── Render Step 1 ─────────────────────────────────────────
-  if (isNameStep) {
+  // ── Hero sempre visibile ───────────────────────────────────
+  const hero = (
+    <div className="home-hero">
+      <div className="hero-badge">MULTIPLAYER</div>
+      <h1 className="hero-title">
+        <span className="title-accent">PIXEL</span>
+        <span className="title-main">ARCADE</span>
+      </h1>
+      <p className="hero-sub">Giochi in tempo reale · Nessuna registrazione</p>
+    </div>
+  );
+
+  // ── Step: nome ─────────────────────────────────────────────
+  if (step === "name") {
     return (
       <div className="home-page">
-        <div className="home-hero">
-          <div className="hero-badge">MULTIPLAYER</div>
-          <h1 className="hero-title">
-            <span className="title-accent">PIXEL</span>
-            <span className="title-main">ARCADE</span>
-          </h1>
-          <p className="hero-sub">Giochi in tempo reale · Nessuna registrazione</p>
-        </div>
-
+        {hero}
         <div className="home-card">
           <div className="input-group">
             <label className="input-label">Il tuo nome</label>
@@ -140,23 +141,120 @@ export default function Home({ onNameConfirmed, onRoomJoined, onBotGame, onBack,
           <button className="btn btn-primary" onClick={handleConfirmName}>
             Continua →
           </button>
+
+          {/* Card giochi già visibili sotto */}
+          <div className="game-cards-hint">
+            <p className="game-cards-hint-label">Giochi disponibili</p>
+            <div className="game-cards-preview-row">
+              <div className="game-card-mini game-card-mini-ttt">
+                <span className="game-card-mini-title">TIC TAC TOE</span>
+                <div className="ttt-preview-grid ttt-preview-mini">
+                  {["X","O","X",null,"O",null,null,"X","O"].map((c,i) => (
+                    <span key={i} className={`ttt-pre ${c === "X" ? "x" : c === "O" ? "o" : "empty"}`}>
+                      {c || ""}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <div className="game-card-mini game-card-mini-c4">
+                <span className="game-card-mini-title">CONNECT 4</span>
+                <div className="c4-preview-mini">
+                  {[null,null,null,null,null,null,null,
+                    null,null,null,null,null,null,null,
+                    null,null,null,"r", null,null,null,
+                    null,null,"r", "y", null,null,null,
+                    null,"r", "y", "y", "r", null,null,
+                    "y", "r", "y", "r", "y", "r", null,
+                  ].map((c,i) => (
+                    <span key={i} className={`c4-pre ${c === "r" ? "c4-pre-r" : c === "y" ? "c4-pre-y" : "c4-pre-empty"}`} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     );
   }
 
-  // ── Render Step 3 (game_actions) ──────────────────────────
+  // ── Step: selezione gioco ─────────────────────────────────
+  if (step === "select") {
+    return (
+      <div className="home-page">
+        {hero}
+        <p className="game-select-welcome">
+          Ciao, <span className="player-name-accent">{playerName}</span>! Scegli un gioco.
+        </p>
+        <div className="game-select-grid">
+
+          {/* Tic Tac Toe */}
+          <button className="game-card game-card-ttt" onClick={() => handleSelectGame("ttt")}>
+            <div className="game-card-preview">
+              <div className="ttt-preview-grid">
+                {["X","O","X",null,"O",null,null,"X","O"].map((c,i) => (
+                  <span key={i} className={`ttt-pre ${c === "X" ? "x" : c === "O" ? "o" : "empty"}`}>{c||""}</span>
+                ))}
+              </div>
+            </div>
+            <div className="game-card-info">
+              <h2 className="game-card-title">TIC TAC TOE</h2>
+              <p className="game-card-desc">Tris classico con modalità Blitz, Random, Abilità Speciali e Bot</p>
+              <div className="game-card-tags">
+                <span className="game-tag">⏱ Blitz</span>
+                <span className="game-tag">🎲 Random</span>
+                <span className="game-tag">⚡ Abilità</span>
+                <span className="game-tag">🤖 Bot</span>
+              </div>
+            </div>
+            <div className="game-card-cta">GIOCA →</div>
+          </button>
+
+          {/* Connect 4 */}
+          <button className="game-card game-card-c4" onClick={() => handleSelectGame("c4")}>
+            <div className="game-card-preview">
+              <div className="c4-preview-grid">
+                {[null,null,null,null,null,null,null,
+                  null,null,null,null,null,null,null,
+                  null,null,null,"r", null,null,null,
+                  null,null,"r", "y", null,null,null,
+                  null,"r", "y", "y", "r", null,null,
+                  "y", "r", "y", "r", "y", "r", null,
+                ].map((c,i) => (
+                  <span key={i} className={`c4-pre ${c === "r" ? "c4-pre-r" : c === "y" ? "c4-pre-y" : "c4-pre-empty"}`} />
+                ))}
+              </div>
+            </div>
+            <div className="game-card-info">
+              <h2 className="game-card-title">CONNECT 4</h2>
+              <p className="game-card-desc">Allinea 4 pedine con modalità Blitz, Random e Bot</p>
+              <div className="game-card-tags">
+                <span className="game-tag">⏱ Blitz</span>
+                <span className="game-tag">🎲 Random</span>
+                <span className="game-tag">🤖 Bot</span>
+              </div>
+            </div>
+            <div className="game-card-cta">GIOCA →</div>
+          </button>
+
+        </div>
+        <button className="btn btn-ghost btn-sm" onClick={() => { setStep("name"); setError(""); }}>← Cambia nome</button>
+      </div>
+    );
+  }
+
+  // ── Step: azioni stanza ───────────────────────────────────
   return (
     <div className="home-page">
-      <div className="home-hero">
-        <button className="btn btn-ghost btn-sm back-btn" onClick={onBack}>← Giochi</button>
-        <p className="game-actions-title">
-          {selectedGame === "ttt" ? "TIC TAC TOE" : "CONNECT 4"}
-        </p>
-        <p className="hero-sub">Ciao, <strong>{playerName}</strong>!</p>
-      </div>
-
+      {hero}
       <div className="home-card">
+        <div className="game-actions-header">
+          <button className="btn btn-ghost btn-sm" onClick={() => { setStep("select"); setMode(null); setError(""); }}>← Giochi</button>
+          <span className="game-actions-title">
+            {selectedGame === "ttt" ? "TIC TAC TOE" : "CONNECT 4"}
+          </span>
+          <span className="game-actions-player">{playerName}</span>
+        </div>
+
         {!mode && (
           <div className="action-buttons">
             <button className="btn btn-primary"   onClick={() => setMode("create")}>✦ Crea Stanza</button>
@@ -209,7 +307,7 @@ export default function Home({ onNameConfirmed, onRoomJoined, onBotGame, onBack,
                 <button className={`btn ${botDifficulty === "hard" ? "btn-primary" : "btn-ghost"}`} onClick={() => setBotDifficulty("hard")}>💀 Difficile</button>
               </div>
               {botDifficulty === "hard" && (
-                <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale — non si può battere!</p>
+                <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale!</p>
               )}
             </div>
 
