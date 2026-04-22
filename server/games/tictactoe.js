@@ -66,7 +66,7 @@ function initGame(players, timerSeconds = 0, randomChance = 0, abilitiesEnabled 
       { ...players[0], symbol: "X" },
       { ...players[1], symbol: "O" },
     ],
-    currentTurn: players[0].id,
+    currentTurn: players[Math.floor(Math.random() * 2)].id,
     status: "playing",
     winner: null,
     winLine: null,
