@@ -1409,3 +1409,55 @@ html, body, #root {
   color: var(--cyan);
 }
 .game-actions-player { font-size: 0.7rem; color: var(--text-dim); }
+
+/* ============================================================
+   CONNECT 4 — Power-ups + Griglie dinamiche
+   ============================================================ */
+
+/* Highlight cella bersaglio bomba */
+.c4-cell-bomba-target {
+  border-color: #ff4444 !important;
+  box-shadow: 0 0 10px rgba(255, 68, 68, 0.6) !important;
+  cursor: pointer;
+  animation: bomba-pulse 0.6s ease infinite alternate;
+}
+
+@keyframes bomba-pulse {
+  from { box-shadow: 0 0 6px rgba(255,68,68,0.4); }
+  to   { box-shadow: 0 0 16px rgba(255,68,68,0.8); }
+}
+
+/* Colonna extra highlight */
+.c4-col-btn.c4-col-extra {
+  background: rgba(0, 255, 136, 0.08);
+  border-radius: 4px;
+}
+
+.indicator-extra {
+  font-size: 0.85rem;
+  animation: bounce-drop 0.5s ease infinite alternate;
+}
+
+/* Badge griglia */
+.mode-badge-grid {
+  background: rgba(139, 92, 246, 0.15);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #a78bfa;
+}
+
+/* Badge power-up */
+.mode-badge-powerup {
+  background: rgba(245, 197, 24, 0.1);
+  border-color: rgba(245, 197, 24, 0.25);
+  color: var(--gold);
+}
+
+/* Griglia C4 dinamica — celle più piccole su 8x7 */
+.c4-board[style*="repeat(8"] .c4-cell {
+  border-width: 1.5px;
+}
+
+.c4-board[style*="repeat(6"] .c4-piece {
+  width: 86%;
+  height: 86%;
+}

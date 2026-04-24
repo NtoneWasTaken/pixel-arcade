@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Tris + Connect 4
+// pages/Lobby.jsx — Tris + Connect 4 + Griglie + Power-ups
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -18,10 +18,16 @@ const RANDOM_OPTIONS = [
   { label: "Anarchia",    value: 0.6, icon: "🎲🎲🎲" },
 ];
 
-const GRID_OPTIONS = [
+const TTT_GRID_OPTIONS = [
   { label: "3×3", value: 3, desc: "Classico"   },
   { label: "4×4", value: 4, desc: "Strategico" },
   { label: "5×5", value: 5, desc: "Epico"      },
+];
+
+const C4_GRID_OPTIONS = [
+  { label: "6×5", value: "6x5", desc: "Compatta"   },
+  { label: "7×6", value: "7x6", desc: "Classica"   },
+  { label: "8×7", value: "8x7", desc: "Epica · 5 in fila" },
 ];
 
 function ScoreDisplay({ room, myId }) {
@@ -73,7 +79,9 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
   const [timerSeconds,     setTimerSeconds]     = useState(0);
   const [randomChance,     setRandomChance]     = useState(0);
   const [abilitiesEnabled, setAbilitiesEnabled] = useState(false);
-  const [gridSize,         setGridSize]         = useState(3);
+  const [tttGridSize,      setTttGridSize]      = useState(3);
+  const [c4GridSize,       setC4GridSize]       = useState("7x6");
+  const [powerUpsEnabled,  setPowerUpsEnabled]  = useState(false);
 
   const isC4 = selectedGame === "c4";
 
@@ -99,9 +107,9 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
   const handleStart = () => {
     setError("");
     if (isC4) {
-      socket.emit("start_game_c4", { timerSeconds, randomChance });
+      socket.emit("start_game_c4", { timerSeconds, randomChance, powerUpsEnabled, gridSize: c4GridSize });
     } else {
-      socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize });
+      socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize: tttGridSize });
     }
   };
 
@@ -164,22 +172,20 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
 
       {isHost ? (
         <>
-          {/* Griglia — solo Tris */}
-          {!isC4 && (
-            <div className="timer-section">
-              <h3 className="section-title">🔲 Griglia</h3>
-              <div className="timer-options">
-                {GRID_OPTIONS.map(opt => (
-                  <button key={opt.value}
-                    className={`timer-option ${gridSize === opt.value ? "selected" : ""}`}
-                    onClick={() => setGridSize(opt.value)}>
-                    <span className="timer-icon">{opt.label}</span>
-                    <span className="timer-label">{opt.desc}</span>
-                  </button>
-                ))}
-              </div>
+          {/* Griglia */}
+          <div className="timer-section">
+            <h3 className="section-title">🔲 Griglia</h3>
+            <div className="timer-options">
+              {(isC4 ? C4_GRID_OPTIONS : TTT_GRID_OPTIONS).map(opt => (
+                <button key={opt.value}
+                  className={`timer-option ${(isC4 ? c4GridSize : tttGridSize) === opt.value ? "selected" : ""}`}
+                  onClick={() => isC4 ? setC4GridSize(opt.value) : setTttGridSize(opt.value)}>
+                  <span className="timer-icon">{opt.label}</span>
+                  <span className="timer-label">{opt.desc}</span>
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
           {/* Timer */}
           <div className="timer-section">
@@ -211,8 +217,8 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
             </div>
           </div>
 
-          {/* Abilità — solo Tris */}
-          {!isC4 && (
+          {/* Abilità Tris / Power-up C4 */}
+          {!isC4 ? (
             <div className="timer-section">
               <h3 className="section-title">⚡ Abilità Speciali</h3>
               <div className="abilities-preview">
@@ -225,6 +231,21 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
                 onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
               >
                 {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
+              </button>
+            </div>
+          ) : (
+            <div className="timer-section">
+              <h3 className="section-title">⚡ Power-up</h3>
+              <div className="abilities-preview">
+                <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
+                <div className="ability-preview-item"><span>➕</span><span>Extra</span></div>
+                <div className="ability-preview-item"><span>🔀</span><span>Shuffle</span></div>
+              </div>
+              <button
+                className={`ability-toggle ${powerUpsEnabled ? "enabled" : ""}`}
+                onClick={() => setPowerUpsEnabled(!powerUpsEnabled)}
+              >
+                {powerUpsEnabled ? "✓ Power-up ATTIVI" : "Attiva Power-up"}
               </button>
             </div>
           )}

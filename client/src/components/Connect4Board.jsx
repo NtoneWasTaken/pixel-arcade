@@ -1,17 +1,16 @@
 // ============================================================
-// components/Connect4Board.jsx — Griglia 7x6 con animazione caduta
+// components/Connect4Board.jsx — Griglia dinamica + power-ups
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
 
-const ROWS = 6;
-const COLS = 7;
-
-export default function Connect4Board({ board, winCells, onColClick, disabled, deviationAnim, mySymbol }) {
-  const [droppingCell, setDroppingCell] = useState(null); // { row, col }
+export default function Connect4Board({ board, winCells, onColClick, onCellClick, disabled, deviationAnim, mySymbol, selectingPowerUp }) {
+  const [droppingCell, setDroppingCell] = useState(null);
   const [hoveredCol,   setHoveredCol]   = useState(null);
 
-  // Quando arriva una nuova pedina, animala
+  const rows = board.length;
+  const cols = board[0]?.length || 7;
+
   useEffect(() => {
     if (deviationAnim?.row !== undefined) {
       setDroppingCell({ row: deviationAnim.row, col: deviationAnim.actualCol });
@@ -19,40 +18,57 @@ export default function Connect4Board({ board, winCells, onColClick, disabled, d
     }
   }, [deviationAnim]);
 
-  const isWinCell = (r, c) => winCells?.some(cell => cell.row === r && cell.col === c);
-  const isDeviated = deviationAnim?.deviated;
+  const isWinCell  = (r, c) => winCells?.some(cell => cell.row === r && cell.col === c);
+  const isDeviated  = deviationAnim?.deviated;
   const intendedCol = deviationAnim?.intendedCol;
   const actualCol   = deviationAnim?.actualCol;
 
+  // Simbolo avversario (per highlight bomba)
+  const oppSymbol = mySymbol === "R" ? "Y" : "R";
+
   return (
     <div className="c4-board-wrapper">
-      {/* Indicatori colonna (frecce hover) */}
-      <div className="c4-col-indicators">
-        {Array(COLS).fill(null).map((_, c) => (
+      {/* Indicatori colonna */}
+      <div className="c4-col-indicators" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {Array(cols).fill(null).map((_, c) => (
           <button
             key={c}
-            className={`c4-col-btn ${hoveredCol === c ? "hovered" : ""} ${disabled ? "disabled" : ""} ${isDeviated && intendedCol === c ? "c4-intended" : ""} ${isDeviated && actualCol === c ? "c4-actual" : ""}`}
-            onClick={() => !disabled && onColClick(c)}
-            onMouseEnter={() => !disabled && setHoveredCol(c)}
+            className={`c4-col-btn
+              ${hoveredCol === c ? "hovered" : ""}
+              ${disabled && !selectingPowerUp ? "disabled" : ""}
+              ${isDeviated && intendedCol === c ? "c4-intended" : ""}
+              ${isDeviated && actualCol === c ? "c4-actual" : ""}
+              ${selectingPowerUp === "extra" ? "c4-col-extra" : ""}
+            `}
+            onClick={() => {
+              if (selectingPowerUp === "extra") { onCellClick?.(-1, c); return; }
+              if (!disabled) onColClick(c);
+            }}
+            onMouseEnter={() => setHoveredCol(c)}
             onMouseLeave={() => setHoveredCol(null)}
-            disabled={disabled}
             aria-label={`Colonna ${c + 1}`}
           >
-            {!disabled && hoveredCol === c && (
+            {!disabled && !selectingPowerUp && hoveredCol === c && (
               <span className={`c4-drop-indicator ${mySymbol === "R" ? "indicator-r" : "indicator-y"}`}>▼</span>
+            )}
+            {selectingPowerUp === "extra" && hoveredCol === c && (
+              <span className="indicator-extra">➕</span>
             )}
           </button>
         ))}
       </div>
 
       {/* Griglia */}
-      <div className="c4-board">
-        {Array(ROWS).fill(null).map((_, r) => (
-          Array(COLS).fill(null).map((_, c) => {
+      <div className="c4-board" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)`, gridTemplateRows: `repeat(${rows}, 1fr)` }}>
+        {Array(rows).fill(null).map((_, r) =>
+          Array(cols).fill(null).map((_, c) => {
             const cell = board[r]?.[c] ?? null;
             const win  = isWinCell(r, c);
             const isDrop = droppingCell?.row === r && droppingCell?.col === c;
-            const isHoverCol = hoveredCol === c && !disabled;
+            const isHoverCol = hoveredCol === c && !disabled && !selectingPowerUp;
+
+            // Highlight per bomba: celle avversarie
+            const isBombaTarget  = selectingPowerUp === "bomba"  && cell === oppSymbol;
 
             return (
               <div
@@ -63,7 +79,14 @@ export default function Connect4Board({ board, winCells, onColClick, disabled, d
                   ${win ? "c4-cell-win" : ""}
                   ${isDrop ? "c4-cell-drop" : ""}
                   ${isHoverCol && !cell ? "c4-cell-hover-col" : ""}
+                  ${isBombaTarget ? "c4-cell-bomba-target" : ""}
                 `}
+                onClick={() => {
+                  if (selectingPowerUp === "bomba" && cell === oppSymbol) {
+                    onCellClick?.(r, c);
+                  }
+                }}
+                style={{ cursor: isBombaTarget ? "pointer" : undefined }}
               >
                 {cell && (
                   <div className={`c4-piece ${cell === "R" ? "piece-r" : "piece-y"} ${isDrop ? "piece-drop" : ""} ${win ? "piece-win" : ""}`} />
@@ -71,12 +94,12 @@ export default function Connect4Board({ board, winCells, onColClick, disabled, d
               </div>
             );
           })
-        ))}
+        )}
       </div>
 
       {/* Numerazione colonne */}
-      <div className="c4-col-numbers">
-        {Array(COLS).fill(null).map((_, c) => (
+      <div className="c4-col-numbers" style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}>
+        {Array(cols).fill(null).map((_, c) => (
           <span key={c} className="c4-col-num">{c + 1}</span>
         ))}
       </div>

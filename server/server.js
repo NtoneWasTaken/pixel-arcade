@@ -1,5 +1,5 @@
 // ============================================================
-// server.js — Tris + Connect 4
+// server.js — Tris + Connect 4 + Power-ups + Griglie
 // ============================================================
 const express = require("express");
 const http = require("http");
@@ -7,7 +7,7 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const { createRoom, getRoom, deleteRoom, addPlayerToRoom, removePlayerFromRoom } = require("./rooms/roomManager");
 const { handleMove: tttMove, initGame: tttInit, skipTurn: tttSkip, handleAbility, getBotMove: tttBot } = require("./games/tictactoe");
-const { handleMove: c4Move, initGame: c4Init, skipTurn: c4Skip, getBotMove: c4Bot } = require("./games/connect4");
+const { handleMove: c4Move, initGame: c4Init, skipTurn: c4Skip, getBotMove: c4Bot, handlePowerUp: c4PowerUp } = require("./games/connect4");
 
 const app = express();
 const server = http.createServer(app);
@@ -26,8 +26,6 @@ app.use(express.json());
 app.get("/", (req, res) => res.json({ status: "ok", message: "Arcade backend running 🎮" }));
 
 const turnTimers = new Map();
-
-// ── Timer helpers ────────────────────────────────────────────
 
 function startTurnTimer(roomCode) {
   clearTurnTimer(roomCode);
@@ -57,8 +55,6 @@ function clearTurnTimer(roomCode) {
   }
 }
 
-// ── State helpers ────────────────────────────────────────────
-
 function buildClientState(gameState, forPlayerId) {
   if (!gameState.ghostMove) return gameState;
   const { index, playerId } = gameState.ghostMove;
@@ -79,8 +75,6 @@ function injectScore(gameState, room) {
   return { ...gameState, score: room.score };
 }
 
-// ── Bot ──────────────────────────────────────────────────────
-
 function scheduleBotMove(roomCode) {
   setTimeout(() => {
     const room = getRoom(roomCode);
@@ -91,9 +85,10 @@ function scheduleBotMove(roomCode) {
     let result;
 
     if (room.gameType === "c4") {
-      const col = c4Bot(room.gameState.board, room.botDifficulty, botPlayer.symbol);
+      const gs = room.gameState;
+      const col = c4Bot(gs.board, room.botDifficulty, botPlayer.symbol, gs.rows, gs.cols, gs.winLen);
       if (col === null) return;
-      result = c4Move(room.gameState, room.botId, col);
+      result = c4Move(gs, room.botId, col);
     } else {
       const idx = tttBot(room.gameState.board, room.botDifficulty, botPlayer.symbol, room.gameState.gridSize);
       if (idx === null) return;
@@ -126,7 +121,6 @@ function scheduleBotMove(roomCode) {
 io.on("connection", (socket) => {
   console.log(`[+] Connesso: ${socket.id}`);
 
-  // ── Stanza multiplayer ─────────────────────────────────────
   socket.on("create_room", ({ playerName }) => {
     const player = { id: socket.id, name: playerName || "Guest", isHost: true };
     const room = createRoom(player);
@@ -153,7 +147,7 @@ io.on("connection", (socket) => {
     io.to(code).emit("player_joined", { room: getRoom(code) });
   });
 
-  // ── Avvia partita Tris ─────────────────────────────────────
+  // ── Avvia Tris ─────────────────────────────────────────────
   socket.on("start_game", ({ timerSeconds = 0, randomChance = 0, abilitiesEnabled = false, gridSize = 3 } = {}) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
@@ -173,8 +167,8 @@ io.on("connection", (socket) => {
     if (timerSeconds > 0) startTurnTimer(code);
   });
 
-  // ── Avvia partita Connect 4 ────────────────────────────────
-  socket.on("start_game_c4", ({ timerSeconds = 0, randomChance = 0 } = {}) => {
+  // ── Avvia Connect 4 ────────────────────────────────────────
+  socket.on("start_game_c4", ({ timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6" } = {}) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
     if (!room) return;
@@ -183,14 +177,14 @@ io.on("connection", (socket) => {
 
     room.status = "playing";
     room.gameType = "c4";
-    room.gameState = c4Init(room.players, timerSeconds, randomChance);
+    room.gameState = c4Init(room.players, timerSeconds, randomChance, powerUpsEnabled, gridSize);
 
     room.players.forEach(p => {
       const s = io.sockets.sockets.get(p.id);
       if (s) s.emit("game_started", { gameState: injectScore(room.gameState, room), gameType: "c4" });
     });
 
-    console.log(`[C4] Partita avviata in ${code}`);
+    console.log(`[C4] Partita avviata in ${code} — griglia:${gridSize} powerUps:${powerUpsEnabled}`);
     if (timerSeconds > 0) startTurnTimer(code);
   });
 
@@ -224,7 +218,7 @@ io.on("connection", (socket) => {
   });
 
   // ── Bot Connect 4 ──────────────────────────────────────────
-  socket.on("create_bot_room_c4", ({ playerName, difficulty = "easy", timerSeconds = 0, randomChance = 0 }) => {
+  socket.on("create_bot_room_c4", ({ playerName, difficulty = "easy", timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6" }) => {
     const BOT_ID = `bot_${Date.now()}`;
     const human = { id: socket.id, name: playerName || "Guest", isHost: true };
     const bot   = { id: BOT_ID, name: "🤖 Bot", isHost: false };
@@ -244,11 +238,11 @@ io.on("connection", (socket) => {
     socket.data.playerName = human.name;
 
     room.status = "playing";
-    room.gameState = c4Init([human, bot], timerSeconds, randomChance);
+    room.gameState = c4Init([human, bot], timerSeconds, randomChance, powerUpsEnabled, gridSize);
 
     socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: difficulty, gameType: "c4" });
 
-    console.log(`[C4-BOT] Partita vs bot avviata — difficoltà: ${difficulty}`);
+    console.log(`[C4-BOT] Partita vs bot — difficoltà:${difficulty} griglia:${gridSize}`);
     if (room.gameState.currentTurn === BOT_ID) scheduleBotMove(room.code);
     else if (timerSeconds > 0) startTurnTimer(room.code);
   });
@@ -297,6 +291,34 @@ io.on("connection", (socket) => {
       room.players.forEach(p => {
         const s = io.sockets.sockets.get(p.id);
         if (s) s.emit("game_update", { gameState: injectScore(room.gameState, room), ...result });
+      });
+    }
+
+    if (room.gameState.status === "finished") return;
+    if (room.isBot && room.gameState.currentTurn === room.botId) scheduleBotMove(code);
+    else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+  });
+
+  // ── Power-up Connect 4 ─────────────────────────────────────
+  socket.on("use_powerup_c4", ({ powerUpName, row, col }) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room || room.status !== "playing") return;
+
+    const result = c4PowerUp(room.gameState, socket.id, powerUpName, { row, col });
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
+    clearTurnTimer(code);
+
+    if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
+
+    const names = { bomba: "💣 Bomba", extra: "➕ Extra", shuffle: "🔀 Shuffle" };
+
+    if (room.isBot) {
+      socket.emit("powerup_used", { playerId: socket.id, powerUpName, gameState: injectScore(room.gameState, room) });
+    } else {
+      room.players.forEach(p => {
+        const s = io.sockets.sockets.get(p.id);
+        if (s) s.emit("powerup_used", { playerId: socket.id, powerUpName, gameState: injectScore(room.gameState, room) });
       });
     }
 
@@ -361,7 +383,7 @@ io.on("connection", (socket) => {
       room.status = "playing";
 
       if (room.gameType === "c4") {
-        room.gameState = c4Init([human, bot], prevGs.timerSeconds, prevGs.randomChance);
+        room.gameState = c4Init([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.powerUpsEnabled, prevGs.gridSize);
         socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: room.botDifficulty, gameType: "c4" });
       } else {
         room.gameState = tttInit([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.abilitiesEnabled, prevGs.gridSize);

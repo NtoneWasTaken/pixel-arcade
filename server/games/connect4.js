@@ -1,42 +1,73 @@
 // ============================================================
-// games/connect4.js — Logica Connect 4 + bot
+// games/connect4.js — Logica Connect 4 + griglie + power-ups + bot
 // ============================================================
 
-const ROWS = 6;
-const COLS = 7;
+const GRID_CONFIGS = {
+  "6x5": { rows: 5, cols: 6, winLen: 4 },
+  "7x6": { rows: 6, cols: 7, winLen: 4 },
+  "8x7": { rows: 7, cols: 8, winLen: 5 },
+};
 
-function initGame(players, timerSeconds = 0, randomChance = 0) {
-  // Board: array di 6 righe x 7 colonne, null = vuoto
+function getConfig(gridSize) {
+  return GRID_CONFIGS[gridSize] || GRID_CONFIGS["7x6"];
+}
+
+function initGame(players, timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6") {
+  const { rows, cols, winLen } = getConfig(gridSize);
   return {
-    board: Array(ROWS).fill(null).map(() => Array(COLS).fill(null)),
+    board: Array(rows).fill(null).map(() => Array(cols).fill(null)),
     players: [
-      { ...players[0], symbol: "R" }, // rosso
-      { ...players[1], symbol: "Y" }, // giallo
+      { ...players[0], symbol: "R" },
+      { ...players[1], symbol: "Y" },
     ],
     currentTurn: players[Math.floor(Math.random() * 2)].id,
     status: "playing",
     winner: null,
-    winCells: null,   // array di {row,col} delle 4 celle vincenti
+    winCells: null,
     timerSeconds,
     turnStartedAt: timerSeconds > 0 ? Date.now() : null,
     randomChance,
-    rows: ROWS,
-    cols: COLS,
+    powerUpsEnabled,
+    gridSize,
+    rows,
+    cols,
+    winLen,
+    powerUps: powerUpsEnabled ? {
+      [players[0].id]: { bomba: 1, extra: 1, shuffle: 1 },
+      [players[1].id]: { bomba: 1, extra: 1, shuffle: 1 },
+    } : {},
   };
 }
 
-// Restituisce la riga disponibile in una colonna (-1 se piena)
-function getAvailableRow(board, col) {
-  for (let r = ROWS - 1; r >= 0; r--) {
-    if (board[r][col] === null) return r;
+function getAvailableRow(board, col, rows) {
+  const r = rows || board.length;
+  for (let i = r - 1; i >= 0; i--) {
+    if (board[i][col] === null) return i;
   }
   return -1;
+}
+
+function applyGravity(board) {
+  const rows = board.length;
+  const cols = board[0].length;
+  for (let c = 0; c < cols; c++) {
+    const pieces = [];
+    for (let r = 0; r < rows; r++) {
+      if (board[r][c] !== null) pieces.push(board[r][c]);
+    }
+    for (let r = 0; r < rows; r++) board[r][c] = null;
+    for (let i = 0; i < pieces.length; i++) {
+      board[rows - 1 - i][c] = pieces[pieces.length - 1 - i];
+    }
+  }
 }
 
 function handleMove(gameState, playerId, col) {
   if (gameState.status !== "playing") return { error: "La partita è già terminata." };
   if (gameState.currentTurn !== playerId) return { error: "Non è il tuo turno." };
-  if (col < 0 || col >= COLS) return { error: "Colonna non valida." };
+
+  const { cols, rows } = gameState;
+  if (col < 0 || col >= cols) return { error: "Colonna non valida." };
 
   const player = gameState.players.find(p => p.id === playerId);
   if (!player) return { error: "Giocatore non trovato." };
@@ -44,23 +75,22 @@ function handleMove(gameState, playerId, col) {
   let actualCol = col;
   let deviated = false;
 
-  // Modalità random — devia su colonna adiacente valida
   if (gameState.randomChance > 0 && Math.random() < gameState.randomChance) {
     const candidates = [];
-    if (col > 0 && getAvailableRow(gameState.board, col - 1) >= 0) candidates.push(col - 1);
-    if (col < COLS - 1 && getAvailableRow(gameState.board, col + 1) >= 0) candidates.push(col + 1);
+    if (col > 0 && getAvailableRow(gameState.board, col - 1, rows) >= 0) candidates.push(col - 1);
+    if (col < cols - 1 && getAvailableRow(gameState.board, col + 1, rows) >= 0) candidates.push(col + 1);
     if (candidates.length > 0) {
       actualCol = candidates[Math.floor(Math.random() * candidates.length)];
       deviated = true;
     }
   }
 
-  const row = getAvailableRow(gameState.board, actualCol);
+  const row = getAvailableRow(gameState.board, actualCol, rows);
   if (row === -1) return { error: "Colonna piena!" };
 
   gameState.board[row][actualCol] = player.symbol;
 
-  const winCells = checkWin(gameState.board, row, actualCol, player.symbol);
+  const winCells = checkWin(gameState.board, row, actualCol, player.symbol, gameState.winLen);
   if (winCells) {
     gameState.status = "finished";
     gameState.winner = playerId;
@@ -68,7 +98,6 @@ function handleMove(gameState, playerId, col) {
     return { deviated, intendedCol: col, actualCol, row };
   }
 
-  // Pareggio — tutte le celle piene
   if (gameState.board[0].every(cell => cell !== null)) {
     gameState.status = "finished";
     gameState.winner = "draw";
@@ -88,93 +117,173 @@ function skipTurn(gameState) {
   if (gameState.timerSeconds > 0) gameState.turnStartedAt = Date.now();
 }
 
-// Controlla vittoria a partire dalla cella appena piazzata
-function checkWin(board, row, col, symbol) {
-  const directions = [
-    [0, 1],   // orizzontale
-    [1, 0],   // verticale
-    [1, 1],   // diagonale \
-    [1, -1],  // diagonale /
-  ];
+// ── POWER-UPS ────────────────────────────────────────────────
+
+function useBomba(gameState, playerId, targetRow, targetCol) {
+  const opponent = gameState.players.find(p => p.id !== playerId);
+  if (gameState.board[targetRow]?.[targetCol] !== opponent.symbol) {
+    return { error: "Devi scegliere una pedina avversaria." };
+  }
+  gameState.board[targetRow][targetCol] = null;
+  applyGravity(gameState.board);
+  const win = checkWinFull(gameState.board, gameState.players, gameState.winLen);
+  if (win) { gameState.status = "finished"; gameState.winner = win.winner; gameState.winCells = win.cells; }
+  return {};
+}
+
+function useExtra(gameState, playerId, col) {
+  const player = gameState.players.find(p => p.id === playerId);
+  const { cols, rows } = gameState;
+  if (col < 0 || col >= cols) return { error: "Colonna non valida." };
+  // Shifta verso il basso e inserisce in cima
+  for (let r = rows - 1; r > 0; r--) gameState.board[r][col] = gameState.board[r - 1][col];
+  gameState.board[0][col] = player.symbol;
+  const win = checkWinFull(gameState.board, gameState.players, gameState.winLen);
+  if (win) { gameState.status = "finished"; gameState.winner = win.winner; gameState.winCells = win.cells; }
+  return {};
+}
+
+function useShuffle(gameState, playerId) {
+  const player   = gameState.players.find(p => p.id === playerId);
+  const opponent = gameState.players.find(p => p.id !== playerId);
+  const { rows, cols } = gameState;
+  const oppCells = [];
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (gameState.board[r][c] === opponent.symbol) oppCells.push({ r, c });
+
+  if (oppCells.length === 0) return { error: "Nessuna pedina avversaria da scambiare." };
+
+  const count = Math.min(2, oppCells.length);
+  oppCells.sort(() => Math.random() - 0.5).slice(0, count).forEach(({ r, c }) => {
+    gameState.board[r][c] = player.symbol;
+  });
+  applyGravity(gameState.board);
+  const win = checkWinFull(gameState.board, gameState.players, gameState.winLen);
+  if (win) { gameState.status = "finished"; gameState.winner = win.winner; gameState.winCells = win.cells; }
+  return {};
+}
+
+function handlePowerUp(gameState, playerId, powerUpName, payload) {
+  if (!gameState.powerUpsEnabled) return { error: "Power-up disabilitati." };
+  if (gameState.status !== "playing") return { error: "La partita è terminata." };
+  if (gameState.currentTurn !== playerId) return { error: "Non è il tuo turno." };
+
+  const playerPU = gameState.powerUps?.[playerId];
+  if (!playerPU || playerPU[powerUpName] <= 0) return { error: "Power-up già usato!" };
+
+  let result = {};
+  switch (powerUpName) {
+    case "bomba":   result = useBomba(gameState, playerId, payload.row, payload.col); break;
+    case "extra":   result = useExtra(gameState, playerId, payload.col); break;
+    case "shuffle": result = useShuffle(gameState, playerId); break;
+    default: return { error: "Power-up non riconosciuto." };
+  }
+
+  if (result.error) return result;
+  playerPU[powerUpName] = 0;
+
+  if (gameState.status === "playing") {
+    const other = gameState.players.find(p => p.id !== playerId);
+    gameState.currentTurn = other.id;
+    if (gameState.timerSeconds > 0) gameState.turnStartedAt = Date.now();
+  }
+
+  return {};
+}
+
+// ── Controllo vittoria ───────────────────────────────────────
+
+function checkWin(board, row, col, symbol, winLen) {
+  const wl = winLen || 4;
+  const rows = board.length;
+  const cols = board[0].length;
+  const directions = [[0,1],[1,0],[1,1],[1,-1]];
 
   for (const [dr, dc] of directions) {
     const cells = [{ row, col }];
-
-    // Avanti
-    for (let i = 1; i < 4; i++) {
-      const r = row + dr * i;
-      const c = col + dc * i;
-      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || board[r][c] !== symbol) break;
+    for (let i = 1; i < wl; i++) {
+      const r = row + dr * i, c = col + dc * i;
+      if (r < 0 || r >= rows || c < 0 || c >= cols || board[r][c] !== symbol) break;
       cells.push({ row: r, col: c });
     }
-    // Indietro
-    for (let i = 1; i < 4; i++) {
-      const r = row - dr * i;
-      const c = col - dc * i;
-      if (r < 0 || r >= ROWS || c < 0 || c >= COLS || board[r][c] !== symbol) break;
+    for (let i = 1; i < wl; i++) {
+      const r = row - dr * i, c = col - dc * i;
+      if (r < 0 || r >= rows || c < 0 || c >= cols || board[r][c] !== symbol) break;
       cells.push({ row: r, col: c });
     }
+    if (cells.length >= wl) return cells.slice(0, wl);
+  }
+  return null;
+}
 
-    if (cells.length >= 4) return cells.slice(0, 4);
+function checkWinFull(board, players, winLen) {
+  const rows = board.length;
+  const cols = board[0].length;
+  for (const player of players) {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (board[r][c] !== player.symbol) continue;
+        const cells = checkWin(board, r, c, player.symbol, winLen);
+        if (cells) return { winner: player.id, cells };
+      }
+    }
   }
   return null;
 }
 
 // ── BOT ─────────────────────────────────────────────────────
 
-function getBotMove(board, difficulty, botSymbol) {
-  if (difficulty === "easy") return getBotMoveEasy(board);
-  return getBotMoveHard(board, botSymbol);
+function getBotMove(board, difficulty, botSymbol, rows, cols, winLen) {
+  const r = rows || board.length;
+  const c = cols || board[0].length;
+  const wl = winLen || 4;
+  if (difficulty === "easy") return getBotMoveEasy(board, r, c);
+  return getBotMoveHard(board, botSymbol, r, c, wl);
 }
 
-function getBotMoveEasy(board) {
+function getBotMoveEasy(board, rows, cols) {
   const available = [];
-  for (let c = 0; c < COLS; c++) {
-    if (getAvailableRow(board, c) >= 0) available.push(c);
-  }
+  for (let c = 0; c < cols; c++)
+    if (getAvailableRow(board, c, rows) >= 0) available.push(c);
   if (available.length === 0) return null;
   return available[Math.floor(Math.random() * available.length)];
 }
 
-function getBotMoveHard(board, botSymbol) {
+function getBotMoveHard(board, botSymbol, rows, cols, winLen) {
   const playerSymbol = botSymbol === "R" ? "Y" : "R";
-  const MAX_DEPTH = 6;
+  const MAX_DEPTH = winLen === 5 ? 4 : 6;
+  let bestScore = -Infinity, bestCol = null;
 
-  let bestScore = -Infinity;
-  let bestCol = null;
-
-  for (let c = 0; c < COLS; c++) {
-    const row = getAvailableRow(board, c);
+  for (let c = 0; c < cols; c++) {
+    const row = getAvailableRow(board, c, rows);
     if (row === -1) continue;
     board[row][c] = botSymbol;
-    const score = minimax(board, MAX_DEPTH - 1, false, botSymbol, playerSymbol, -Infinity, Infinity);
+    const score = minimax(board, MAX_DEPTH - 1, false, botSymbol, playerSymbol, -Infinity, Infinity, rows, cols, winLen);
     board[row][c] = null;
     if (score > bestScore) { bestScore = score; bestCol = c; }
   }
-
   return bestCol;
 }
 
-function minimax(board, depth, isMaximizing, botSymbol, playerSymbol, alpha, beta) {
-  // Controlla se qualcuno ha vinto
-  for (let r = 0; r < ROWS; r++) {
-    for (let c = 0; c < COLS; c++) {
-      if (board[r][c] === botSymbol && checkWin(board, r, c, botSymbol)) return 1000 + depth;
-      if (board[r][c] === playerSymbol && checkWin(board, r, c, playerSymbol)) return -(1000 + depth);
+function minimax(board, depth, isMaximizing, botSymbol, playerSymbol, alpha, beta, rows, cols, winLen) {
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      if (board[r][c] === botSymbol && checkWin(board, r, c, botSymbol, winLen)) return 1000 + depth;
+      if (board[r][c] === playerSymbol && checkWin(board, r, c, playerSymbol, winLen)) return -(1000 + depth);
     }
   }
 
-  // Pareggio o profondità massima
   const isDraw = board[0].every(cell => cell !== null);
-  if (isDraw || depth === 0) return evaluate(board, botSymbol, playerSymbol);
+  if (isDraw || depth === 0) return evaluate(board, botSymbol, playerSymbol, rows, cols, winLen);
 
   if (isMaximizing) {
     let best = -Infinity;
-    for (let c = 0; c < COLS; c++) {
-      const row = getAvailableRow(board, c);
+    for (let c = 0; c < cols; c++) {
+      const row = getAvailableRow(board, c, rows);
       if (row === -1) continue;
       board[row][c] = botSymbol;
-      best = Math.max(best, minimax(board, depth - 1, false, botSymbol, playerSymbol, alpha, beta));
+      best = Math.max(best, minimax(board, depth - 1, false, botSymbol, playerSymbol, alpha, beta, rows, cols, winLen));
       board[row][c] = null;
       alpha = Math.max(alpha, best);
       if (beta <= alpha) break;
@@ -182,11 +291,11 @@ function minimax(board, depth, isMaximizing, botSymbol, playerSymbol, alpha, bet
     return best;
   } else {
     let best = Infinity;
-    for (let c = 0; c < COLS; c++) {
-      const row = getAvailableRow(board, c);
+    for (let c = 0; c < cols; c++) {
+      const row = getAvailableRow(board, c, rows);
       if (row === -1) continue;
       board[row][c] = playerSymbol;
-      best = Math.min(best, minimax(board, depth - 1, true, botSymbol, playerSymbol, alpha, beta));
+      best = Math.min(best, minimax(board, depth - 1, true, botSymbol, playerSymbol, alpha, beta, rows, cols, winLen));
       board[row][c] = null;
       beta = Math.min(beta, best);
       if (beta <= alpha) break;
@@ -195,32 +304,25 @@ function minimax(board, depth, isMaximizing, botSymbol, playerSymbol, alpha, bet
   }
 }
 
-// Valutazione euristica della board
-function evaluate(board, botSymbol, playerSymbol) {
+function evaluate(board, botSymbol, playerSymbol, rows, cols, winLen) {
   let score = 0;
-
-  // Centro preferito
-  const centerCol = Math.floor(COLS / 2);
-  for (let r = 0; r < ROWS; r++) {
+  const centerCol = Math.floor(cols / 2);
+  for (let r = 0; r < rows; r++)
     if (board[r][centerCol] === botSymbol) score += 3;
-  }
 
-  // Valuta finestre di 4 in tutte le direzioni
   const directions = [[0,1],[1,0],[1,1],[1,-1]];
   for (const [dr, dc] of directions) {
-    for (let r = 0; r < ROWS; r++) {
-      for (let c = 0; c < COLS; c++) {
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
         const window = [];
-        for (let i = 0; i < 4; i++) {
-          const nr = r + dr * i;
-          const nc = c + dc * i;
-          if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) window.push(board[nr][nc]);
+        for (let i = 0; i < winLen; i++) {
+          const nr = r + dr * i, nc = c + dc * i;
+          if (nr >= 0 && nr < rows && nc >= 0 && nc < cols) window.push(board[nr][nc]);
         }
-        if (window.length === 4) score += scoreWindow(window, botSymbol, playerSymbol);
+        if (window.length === winLen) score += scoreWindow(window, botSymbol, playerSymbol);
       }
     }
   }
-
   return score;
 }
 
@@ -228,12 +330,11 @@ function scoreWindow(window, botSymbol, playerSymbol) {
   const bot    = window.filter(c => c === botSymbol).length;
   const player = window.filter(c => c === playerSymbol).length;
   const empty  = window.filter(c => c === null).length;
-
-  if (bot === 4) return 100;
-  if (bot === 3 && empty === 1) return 5;
-  if (bot === 2 && empty === 2) return 2;
-  if (player === 3 && empty === 1) return -4;
+  if (bot === window.length) return 100;
+  if (bot === window.length - 1 && empty === 1) return 5;
+  if (bot === window.length - 2 && empty === 2) return 2;
+  if (player === window.length - 1 && empty === 1) return -4;
   return 0;
 }
 
-module.exports = { initGame, handleMove, skipTurn, getBotMove, getAvailableRow, ROWS, COLS };
+module.exports = { initGame, handleMove, handlePowerUp, skipTurn, getBotMove, getAvailableRow, GRID_CONFIGS };

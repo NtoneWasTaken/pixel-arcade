@@ -17,16 +17,22 @@ const RANDOM_OPTIONS = [
   { label: "Anarchia",    value: 0.6 },
 ];
 
-const GRID_OPTIONS = [
+const TTT_GRID_OPTIONS = [
   { label: "3×3", value: 3, desc: "Classico"   },
   { label: "4×4", value: 4, desc: "Strategico" },
   { label: "5×5", value: 5, desc: "Epico"      },
 ];
 
+const C4_GRID_OPTIONS = [
+  { label: "6×5", value: "6x5", desc: "Compatta"          },
+  { label: "7×6", value: "7x6", desc: "Classica"          },
+  { label: "8×7", value: "8x7", desc: "Epica · 5 in fila" },
+];
+
 export default function Home({ onRoomJoined, onBotGame }) {
   const [playerName,       setPlayerName]       = useState("");
   const [joinCode,         setJoinCode]         = useState("");
-  const [step,             setStep]             = useState("name"); // "name" | "select" | "actions"
+  const [step,             setStep]             = useState("name");
   const [selectedGame,     setSelectedGame]     = useState(null);
   const [mode,             setMode]             = useState(null);
   const [error,            setError]            = useState("");
@@ -36,7 +42,9 @@ export default function Home({ onRoomJoined, onBotGame }) {
   const [botTimer,         setBotTimer]         = useState(0);
   const [botRandom,        setBotRandom]        = useState(0);
   const [botAbilities,     setBotAbilities]     = useState(false);
-  const [botGridSize,      setBotGridSize]      = useState(3);
+  const [botTttGrid,       setBotTttGrid]       = useState(3);
+  const [botC4Grid,        setBotC4Grid]        = useState("7x6");
+  const [botPowerUps,      setBotPowerUps]      = useState(false);
 
   const isC4 = selectedGame === "c4";
 
@@ -94,10 +102,12 @@ export default function Home({ onRoomJoined, onBotGame }) {
     setError(""); setLoading(true);
     if (isC4) {
       socket.emit("create_bot_room_c4", {
-        playerName:   playerName.trim(),
-        difficulty:   botDifficulty,
-        timerSeconds: botTimer,
-        randomChance: botRandom,
+        playerName:      playerName.trim(),
+        difficulty:      botDifficulty,
+        timerSeconds:    botTimer,
+        randomChance:    botRandom,
+        powerUpsEnabled: botPowerUps,
+        gridSize:        botC4Grid,
       });
     } else {
       socket.emit("create_bot_room", {
@@ -106,7 +116,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
         timerSeconds:     botTimer,
         randomChance:     botRandom,
         abilitiesEnabled: botAbilities,
-        gridSize:         botGridSize,
+        gridSize:         botTttGrid,
       });
     }
   };
@@ -191,6 +201,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
                 <span className="game-tag">🎲 Random</span>
                 <span className="game-tag">⚡ Abilità</span>
                 <span className="game-tag">🤖 Bot</span>
+                <span className="game-tag">🔲 3 griglie</span>
               </div>
             </div>
             <div className="game-card-cta">GIOCA →</div>
@@ -209,11 +220,13 @@ export default function Home({ onRoomJoined, onBotGame }) {
             </div>
             <div className="game-card-info">
               <h2 className="game-card-title">CONNECT 4</h2>
-              <p className="game-card-desc">Allinea 4 pedine con modalità Blitz, Random e Bot</p>
+              <p className="game-card-desc">Allinea le pedine con modalità Blitz, Random, Power-up e Bot</p>
               <div className="game-card-tags">
                 <span className="game-tag">⏱ Blitz</span>
                 <span className="game-tag">🎲 Random</span>
+                <span className="game-tag">⚡ Power-up</span>
                 <span className="game-tag">🤖 Bot</span>
+                <span className="game-tag">🔲 3 griglie</span>
               </div>
             </div>
             <div className="game-card-cta">GIOCA →</div>
@@ -275,6 +288,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
 
         {mode === "bot" && (
           <div className="mode-section">
+            {/* Difficoltà */}
             <div className="bot-option-group">
               <p className="bot-option-label">🤖 Difficoltà</p>
               <div className="bot-difficulty-btns">
@@ -284,20 +298,22 @@ export default function Home({ onRoomJoined, onBotGame }) {
               {botDifficulty === "hard" && <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale!</p>}
             </div>
 
-            {!isC4 && (
-              <div className="bot-option-group">
-                <p className="bot-option-label">🔲 Griglia</p>
-                <div className="timer-options">
-                  {GRID_OPTIONS.map(opt => (
-                    <button key={opt.value} className={`timer-option ${botGridSize===opt.value?"selected":""}`} onClick={() => setBotGridSize(opt.value)}>
-                      <span className="timer-icon">{opt.label}</span>
-                      <span className="timer-label">{opt.desc}</span>
-                    </button>
-                  ))}
-                </div>
+            {/* Griglia */}
+            <div className="bot-option-group">
+              <p className="bot-option-label">🔲 Griglia</p>
+              <div className="timer-options">
+                {(isC4 ? C4_GRID_OPTIONS : TTT_GRID_OPTIONS).map(opt => (
+                  <button key={opt.value}
+                    className={`timer-option ${(isC4 ? botC4Grid : botTttGrid) === opt.value ? "selected" : ""}`}
+                    onClick={() => isC4 ? setBotC4Grid(opt.value) : setBotTttGrid(opt.value)}>
+                    <span className="timer-icon">{opt.label}</span>
+                    <span className="timer-label">{opt.desc}</span>
+                  </button>
+                ))}
               </div>
-            )}
+            </div>
 
+            {/* Timer */}
             <div className="bot-option-group">
               <p className="bot-option-label">⏱ Timer</p>
               <div className="timer-options">
@@ -309,6 +325,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
               </div>
             </div>
 
+            {/* Random */}
             <div className="bot-option-group">
               <p className="bot-option-label">🎲 Random</p>
               <div className="timer-options">
@@ -320,13 +337,18 @@ export default function Home({ onRoomJoined, onBotGame }) {
               </div>
             </div>
 
-            {!isC4 && (
-              <div className="bot-option-group">
+            {/* Abilità Tris / Power-up C4 */}
+            <div className="bot-option-group">
+              {!isC4 ? (
                 <button className={`ability-toggle ${botAbilities?"enabled":""}`} onClick={() => setBotAbilities(!botAbilities)}>
                   {botAbilities ? "✓ Abilità ATTIVE" : "⚡ Attiva Abilità Speciali"}
                 </button>
-              </div>
-            )}
+              ) : (
+                <button className={`ability-toggle ${botPowerUps?"enabled":""}`} onClick={() => setBotPowerUps(!botPowerUps)}>
+                  {botPowerUps ? "✓ Power-up ATTIVI" : "⚡ Attiva Power-up"}
+                </button>
+              )}
+            </div>
 
             <div className="action-buttons">
               <button className="btn btn-bot" onClick={handleBotStart} disabled={loading}>
