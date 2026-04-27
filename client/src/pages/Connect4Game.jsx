@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Connect4Game.jsx — Connect 4 + Power-ups + Griglie
+// pages/Connect4Game.jsx — Connect 4 completo (Fase 1 + Fase 2)
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -79,7 +79,6 @@ function ScoreDisplay({ gameState, roomCode }) {
   );
 }
 
-// ── PowerUpButton ─────────────────────────────────────────────
 function PowerUpButton({ icon, label, uses, onClick, selecting, disabled }) {
   return (
     <button
@@ -95,14 +94,28 @@ function PowerUpButton({ icon, label, uses, onClick, selecting, disabled }) {
   );
 }
 
+// ── Gravity indicator ─────────────────────────────────────────
+function GravityIndicator({ gravityDir, turnsUntilFlip, enabled }) {
+  if (!enabled) return null;
+  const isUp = gravityDir === "up";
+  return (
+    <div className={`gravity-indicator ${isUp ? "gravity-up-active" : "gravity-down-active"}`}>
+      <span className="gravity-icon">{isUp ? "🔼" : "🔽"}</span>
+      <span className="gravity-label">Gravità {isUp ? "SU" : "GIÙ"}</span>
+      <span className="gravity-countdown">flip in {turnsUntilFlip} {turnsUntilFlip === 1 ? "turno" : "turni"}</span>
+    </div>
+  );
+}
+
 // ── Connect4Game ──────────────────────────────────────────────
 export default function Connect4Game({ initialGameState, roomCode, isBot = false, onLeave }) {
-  const [gameState,       setGameState]       = useState(initialGameState);
-  const [message,         setMessage]         = useState("");
-  const [skippedMsg,      setSkippedMsg]      = useState("");
-  const [notification,    setNotification]    = useState("");
-  const [deviationAnim,   setDeviationAnim]   = useState(null);
-  const [selectingPowerUp,setSelectingPowerUp]= useState(null); // null | "bomba" | "extra" | "shuffle"
+  const [gameState,        setGameState]        = useState(initialGameState);
+  const [message,          setMessage]          = useState("");
+  const [skippedMsg,       setSkippedMsg]       = useState("");
+  const [notification,     setNotification]     = useState("");
+  const [deviationAnim,    setDeviationAnim]    = useState(null);
+  const [selectingPowerUp, setSelectingPowerUp] = useState(null);
+  const [gravityFlipAnim,  setGravityFlipAnim]  = useState(false);
 
   const myPlayer = gameState.players.find(p => p.id === socket.id);
   const mySymbol = myPlayer?.symbol;
@@ -110,33 +123,47 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
   useEffect(() => { updateMessage(initialGameState); }, []);
 
   useEffect(() => {
-    const handleGameUpdate = ({ gameState: gs, deviated, intendedCol, actualCol, row }) => {
+    const handleGameUpdate = ({ gameState: gs, deviated, intendedCol, actualCol, row, gravityFlipped, isPopOut }) => {
       setGameState(gs);
       updateMessage(gs);
       setSkippedMsg("");
       setSelectingPowerUp(null);
-      setDeviationAnim({ deviated, intendedCol, actualCol, row });
-      setTimeout(() => setDeviationAnim(null), 600);
-      if (deviated) showNotification("🎲 Mossa deviata!");
+
+      if (!isPopOut) {
+        setDeviationAnim({ deviated, intendedCol, actualCol, row });
+        setTimeout(() => setDeviationAnim(null), 600);
+        if (deviated) showNotification("🎲 Mossa deviata!");
+      }
     };
+
+    const handleGravityFlip = ({ gravityDir }) => {
+      setGravityFlipAnim(true);
+      setTimeout(() => setGravityFlipAnim(false), 700);
+      showNotification(gravityDir === "up" ? "🔼 Gravità invertita — pedine verso l'alto!" : "🔽 Gravità normale — pedine verso il basso!");
+    };
+
     const handleGameStarted = ({ gameState: gs }) => {
       setGameState(gs); updateMessage(gs); setSelectingPowerUp(null);
     };
+
     const handlePowerUpUsed = ({ playerId, powerUpName, gameState: gs }) => {
       setGameState(gs); updateMessage(gs); setSelectingPowerUp(null);
       const names = { bomba: "💣 Bomba", extra: "➕ Extra", shuffle: "🔀 Shuffle" };
       const who = playerId === socket.id ? "Hai usato" : "L'avversario ha usato";
       showNotification(`${who} ${names[powerUpName]}!`);
     };
+
     const handleTurnSkipped = ({ skippedPlayerId, gameState: gs }) => {
       setGameState(gs); updateMessage(gs);
       setSkippedMsg(skippedPlayerId === socket.id ? "Hai esaurito il tempo! Turno saltato." : "L'avversario ha esaurito il tempo! Tocca a te.");
       setTimeout(() => setSkippedMsg(""), 2500);
     };
+
     const handleGameAborted  = ({ message: msg }) => setMessage(msg);
     const handleRematchReady = ({ room }) => onLeave("lobby", room);
 
     socket.on("game_update",   handleGameUpdate);
+    socket.on("gravity_flip",  handleGravityFlip);
     socket.on("game_started",  handleGameStarted);
     socket.on("powerup_used",  handlePowerUpUsed);
     socket.on("turn_skipped",  handleTurnSkipped);
@@ -145,6 +172,7 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
 
     return () => {
       socket.off("game_update",   handleGameUpdate);
+      socket.off("gravity_flip",  handleGravityFlip);
       socket.off("game_started",  handleGameStarted);
       socket.off("powerup_used",  handlePowerUpUsed);
       socket.off("turn_skipped",  handleTurnSkipped);
@@ -170,14 +198,13 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
 
   function showNotification(msg) {
     setNotification(msg);
-    setTimeout(() => setNotification(""), 2000);
+    setTimeout(() => setNotification(""), 2500);
   }
 
   const handleColClick = (col) => {
     socket.emit("player_move_c4", { col });
   };
 
-  // Gestisce click su cella (per power-ups bomba) o colonna (extra)
   const handleCellClick = (row, col) => {
     if (selectingPowerUp === "bomba") {
       socket.emit("use_powerup_c4", { powerUpName: "bomba", row, col });
@@ -188,12 +215,13 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
     }
   };
 
+  const handlePopOut = (col) => {
+    socket.emit("player_popout_c4", { col });
+  };
+
   const handlePowerUpClick = (name) => {
-    if (selectingPowerUp === name) {
-      setSelectingPowerUp(null); return;
-    }
+    if (selectingPowerUp === name) { setSelectingPowerUp(null); return; }
     if (name === "shuffle") {
-      // Shuffle non richiede selezione — usa subito
       socket.emit("use_powerup_c4", { powerUpName: "shuffle" });
       return;
     }
@@ -205,21 +233,22 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
     showNotification(hints[name]);
   };
 
-  const isMyTurn   = gameState.currentTurn === socket.id && gameState.status === "playing";
-  const isFinished = gameState.status === "finished";
-  const iWon       = isFinished && gameState.winner === socket.id;
-  const isDraw     = isFinished && gameState.winner === "draw";
-  const hasTimer   = gameState.timerSeconds > 0;
-  const hasRandom  = gameState.randomChance > 0;
+  const isMyTurn    = gameState.currentTurn === socket.id && gameState.status === "playing";
+  const isFinished  = gameState.status === "finished";
+  const iWon        = isFinished && gameState.winner === socket.id;
+  const isDraw      = isFinished && gameState.winner === "draw";
+  const hasTimer    = gameState.timerSeconds > 0;
+  const hasRandom   = gameState.randomChance > 0;
   const hasPowerUps = gameState.powerUpsEnabled;
+  const hasGravity  = gameState.gravityEnabled;
+  const hasPopOut   = gameState.popOutEnabled;
 
   const myPowerUps  = hasPowerUps ? (gameState.powerUps?.[socket.id] || {}) : null;
   const oppPowerUps = hasPowerUps ? (gameState.powerUps?.[gameState.players.find(p => p.id !== socket.id)?.id] || {}) : null;
 
-  // Label griglia
-  const gridLabels = { "6x5": "6×5", "7x6": "7×6", "8x7": "8×7" };
-  const gridLabel = gridLabels[gameState.gridSize] || "7×6";
-  const winLen = gameState.winLen || 4;
+  const gridLabels  = { "6x5": "6×5", "7x6": "7×6", "8x7": "8×7" };
+  const gridLabel   = gridLabels[gameState.gridSize] || "7×6";
+  const winLen      = gameState.winLen || 4;
 
   return (
     <div className="game-page">
@@ -238,14 +267,16 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
       {isBot && <div className="bot-indicator">🤖 Stai giocando contro il Bot</div>}
 
       {/* Badge modalità */}
-      {(hasTimer || hasRandom || hasPowerUps || gameState.gridSize !== "7x6") && (
+      {(hasTimer || hasRandom || hasPowerUps || hasGravity || hasPopOut || gameState.gridSize !== "7x6") && (
         <div className="mode-badges">
           {gameState.gridSize && gameState.gridSize !== "7x6" && (
             <span className="mode-badge mode-badge-grid">{gridLabel} · {winLen} in fila</span>
           )}
-          {hasTimer   && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
-          {hasRandom  && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
+          {hasTimer    && <span className="mode-badge">⏱ {gameState.timerSeconds}s</span>}
+          {hasRandom   && <span className="mode-badge mode-badge-random">🎲 {gameState.randomChance === 0.2 ? "Leggero" : gameState.randomChance === 0.4 ? "Caotico" : "Anarchia"}</span>}
           {hasPowerUps && <span className="mode-badge mode-badge-powerup">⚡ Power-up</span>}
+          {hasGravity  && <span className="mode-badge mode-badge-gravity">🌀 Gravity</span>}
+          {hasPopOut   && <span className="mode-badge mode-badge-popout">🎯 Pop Out</span>}
         </div>
       )}
 
@@ -262,6 +293,15 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
           </div>
         ))}
       </div>
+
+      {/* Gravity indicator */}
+      {hasGravity && !isFinished && (
+        <GravityIndicator
+          gravityDir={gameState.gravityDir}
+          turnsUntilFlip={gameState.turnsUntilFlip}
+          enabled={hasGravity}
+        />
+      )}
 
       <TimerBar timerSeconds={gameState.timerSeconds} turnStartedAt={gameState.turnStartedAt} currentTurn={gameState.currentTurn} myId={socket.id} />
 
@@ -292,10 +332,14 @@ export default function Connect4Game({ initialGameState, roomCode, isBot = false
         winCells={gameState.winCells}
         onColClick={handleColClick}
         onCellClick={handleCellClick}
+        onPopOut={handlePopOut}
         disabled={!isMyTurn && !selectingPowerUp}
         deviationAnim={deviationAnim}
         mySymbol={mySymbol}
         selectingPowerUp={selectingPowerUp}
+        gravityDir={gameState.gravityDir}
+        popOutEnabled={hasPopOut && isMyTurn && !isFinished}
+        gravityFlipAnim={gravityFlipAnim}
       />
 
       {isFinished && (

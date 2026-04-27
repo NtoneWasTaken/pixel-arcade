@@ -1,5 +1,5 @@
 // ============================================================
-// server.js — Tris + Connect 4 + Power-ups + Griglie
+// server.js — Tris + Connect 4 + Power-ups + Griglie + Gravity + PopOut
 // ============================================================
 const express = require("express");
 const http = require("http");
@@ -7,7 +7,7 @@ const { Server } = require("socket.io");
 const cors = require("cors");
 const { createRoom, getRoom, deleteRoom, addPlayerToRoom, removePlayerFromRoom } = require("./rooms/roomManager");
 const { handleMove: tttMove, initGame: tttInit, skipTurn: tttSkip, handleAbility, getBotMove: tttBot } = require("./games/tictactoe");
-const { handleMove: c4Move, initGame: c4Init, skipTurn: c4Skip, getBotMove: c4Bot, handlePowerUp: c4PowerUp } = require("./games/connect4");
+const { handleMove: c4Move, initGame: c4Init, skipTurn: c4Skip, getBotMove: c4Bot, handlePowerUp: c4PowerUp, handlePopOut: c4PopOut } = require("./games/connect4");
 
 const app = express();
 const server = http.createServer(app);
@@ -75,6 +75,18 @@ function injectScore(gameState, room) {
   return { ...gameState, score: room.score };
 }
 
+function emitC4Update(room, result, eventName = "game_update") {
+  if (room.isBot) {
+    const humanSocket = io.sockets.sockets.get(room.humanId);
+    if (humanSocket) humanSocket.emit(eventName, { gameState: injectScore(room.gameState, room), ...result });
+  } else {
+    room.players.forEach(p => {
+      const s = io.sockets.sockets.get(p.id);
+      if (s) s.emit(eventName, { gameState: injectScore(room.gameState, room), ...result });
+    });
+  }
+}
+
 function scheduleBotMove(roomCode) {
   setTimeout(() => {
     const room = getRoom(roomCode);
@@ -86,7 +98,7 @@ function scheduleBotMove(roomCode) {
 
     if (room.gameType === "c4") {
       const gs = room.gameState;
-      const col = c4Bot(gs.board, room.botDifficulty, botPlayer.symbol, gs.rows, gs.cols, gs.winLen);
+      const col = c4Bot(gs.board, room.botDifficulty, botPlayer.symbol, gs.rows, gs.cols, gs.winLen, gs.gravityDir);
       if (col === null) return;
       result = c4Move(gs, room.botId, col);
     } else {
@@ -98,17 +110,11 @@ function scheduleBotMove(roomCode) {
     if (result.error) return;
     clearTurnTimer(roomCode);
 
-    if (room.gameState.status === "finished") {
-      updateScore(room);
-      room.status = "finished";
-    }
+    if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
 
     const humanSocket = io.sockets.sockets.get(room.humanId);
     if (humanSocket) {
-      humanSocket.emit("game_update", {
-        gameState: injectScore(room.gameState, room),
-        ...result,
-      });
+      humanSocket.emit("game_update", { gameState: injectScore(room.gameState, room), ...result });
     }
 
     if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
@@ -168,7 +174,7 @@ io.on("connection", (socket) => {
   });
 
   // ── Avvia Connect 4 ────────────────────────────────────────
-  socket.on("start_game_c4", ({ timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6" } = {}) => {
+  socket.on("start_game_c4", ({ timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6", gravityEnabled = false, popOutEnabled = false } = {}) => {
     const code = socket.data.roomCode;
     const room = getRoom(code);
     if (!room) return;
@@ -177,14 +183,14 @@ io.on("connection", (socket) => {
 
     room.status = "playing";
     room.gameType = "c4";
-    room.gameState = c4Init(room.players, timerSeconds, randomChance, powerUpsEnabled, gridSize);
+    room.gameState = c4Init(room.players, timerSeconds, randomChance, powerUpsEnabled, gridSize, gravityEnabled, popOutEnabled);
 
     room.players.forEach(p => {
       const s = io.sockets.sockets.get(p.id);
       if (s) s.emit("game_started", { gameState: injectScore(room.gameState, room), gameType: "c4" });
     });
 
-    console.log(`[C4] Partita avviata in ${code} — griglia:${gridSize} powerUps:${powerUpsEnabled}`);
+    console.log(`[C4] Avviata — griglia:${gridSize} gravity:${gravityEnabled} popout:${popOutEnabled}`);
     if (timerSeconds > 0) startTurnTimer(code);
   });
 
@@ -195,13 +201,9 @@ io.on("connection", (socket) => {
     const bot   = { id: BOT_ID, name: "🤖 Bot", isHost: false };
 
     const room = createRoom(human);
-    room.score[socket.id] = 0;
-    room.score[BOT_ID] = 0;
-    room.botId = BOT_ID;
-    room.humanId = socket.id;
-    room.botDifficulty = difficulty;
-    room.isBot = true;
-    room.gameType = "ttt";
+    room.score[socket.id] = 0; room.score[BOT_ID] = 0;
+    room.botId = BOT_ID; room.humanId = socket.id;
+    room.botDifficulty = difficulty; room.isBot = true; room.gameType = "ttt";
 
     addPlayerToRoom(room.code, bot);
     socket.join(room.code);
@@ -218,19 +220,15 @@ io.on("connection", (socket) => {
   });
 
   // ── Bot Connect 4 ──────────────────────────────────────────
-  socket.on("create_bot_room_c4", ({ playerName, difficulty = "easy", timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6" }) => {
+  socket.on("create_bot_room_c4", ({ playerName, difficulty = "easy", timerSeconds = 0, randomChance = 0, powerUpsEnabled = false, gridSize = "7x6", gravityEnabled = false, popOutEnabled = false }) => {
     const BOT_ID = `bot_${Date.now()}`;
     const human = { id: socket.id, name: playerName || "Guest", isHost: true };
     const bot   = { id: BOT_ID, name: "🤖 Bot", isHost: false };
 
     const room = createRoom(human);
-    room.score[socket.id] = 0;
-    room.score[BOT_ID] = 0;
-    room.botId = BOT_ID;
-    room.humanId = socket.id;
-    room.botDifficulty = difficulty;
-    room.isBot = true;
-    room.gameType = "c4";
+    room.score[socket.id] = 0; room.score[BOT_ID] = 0;
+    room.botId = BOT_ID; room.humanId = socket.id;
+    room.botDifficulty = difficulty; room.isBot = true; room.gameType = "c4";
 
     addPlayerToRoom(room.code, bot);
     socket.join(room.code);
@@ -238,11 +236,11 @@ io.on("connection", (socket) => {
     socket.data.playerName = human.name;
 
     room.status = "playing";
-    room.gameState = c4Init([human, bot], timerSeconds, randomChance, powerUpsEnabled, gridSize);
+    room.gameState = c4Init([human, bot], timerSeconds, randomChance, powerUpsEnabled, gridSize, gravityEnabled, popOutEnabled);
 
     socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: difficulty, gameType: "c4" });
 
-    console.log(`[C4-BOT] Partita vs bot — difficoltà:${difficulty} griglia:${gridSize}`);
+    console.log(`[C4-BOT] difficoltà:${difficulty} griglia:${gridSize} gravity:${gravityEnabled}`);
     if (room.gameState.currentTurn === BOT_ID) scheduleBotMove(room.code);
     else if (timerSeconds > 0) startTurnTimer(room.code);
   });
@@ -285,14 +283,35 @@ io.on("connection", (socket) => {
 
     if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
 
-    if (room.isBot) {
-      socket.emit("game_update", { gameState: injectScore(room.gameState, room), ...result });
-    } else {
-      room.players.forEach(p => {
-        const s = io.sockets.sockets.get(p.id);
-        if (s) s.emit("game_update", { gameState: injectScore(room.gameState, room), ...result });
-      });
+    // Se c'è stato un gravity flip, emetti evento dedicato
+    if (result.gravityFlipped) {
+      io.to(code).emit("gravity_flip", { gravityDir: result.gravityDir });
     }
+
+    emitC4Update(room, result);
+
+    if (room.gameState.status === "finished") return;
+    if (room.isBot && room.gameState.currentTurn === room.botId) scheduleBotMove(code);
+    else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+  });
+
+  // ── Pop Out Connect 4 ──────────────────────────────────────
+  socket.on("player_popout_c4", ({ col }) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room || room.status !== "playing") return;
+
+    const result = c4PopOut(room.gameState, socket.id, col);
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
+    clearTurnTimer(code);
+
+    if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
+
+    if (result.gravityFlipped) {
+      io.to(code).emit("gravity_flip", { gravityDir: result.gravityDir });
+    }
+
+    emitC4Update(room, { ...result, isPopOut: true });
 
     if (room.gameState.status === "finished") return;
     if (room.isBot && room.gameState.currentTurn === room.botId) scheduleBotMove(code);
@@ -310,8 +329,6 @@ io.on("connection", (socket) => {
     clearTurnTimer(code);
 
     if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
-
-    const names = { bomba: "💣 Bomba", extra: "➕ Extra", shuffle: "🔀 Shuffle" };
 
     if (room.isBot) {
       socket.emit("powerup_used", { playerId: socket.id, powerUpName, gameState: injectScore(room.gameState, room) });
@@ -383,7 +400,7 @@ io.on("connection", (socket) => {
       room.status = "playing";
 
       if (room.gameType === "c4") {
-        room.gameState = c4Init([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.powerUpsEnabled, prevGs.gridSize);
+        room.gameState = c4Init([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.powerUpsEnabled, prevGs.gridSize, prevGs.gravityEnabled, prevGs.popOutEnabled);
         socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: room.botDifficulty, gameType: "c4" });
       } else {
         room.gameState = tttInit([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.abilitiesEnabled, prevGs.gridSize);

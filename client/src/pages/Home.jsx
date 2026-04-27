@@ -45,6 +45,8 @@ export default function Home({ onRoomJoined, onBotGame }) {
   const [botTttGrid,       setBotTttGrid]       = useState(3);
   const [botC4Grid,        setBotC4Grid]        = useState("7x6");
   const [botPowerUps,      setBotPowerUps]      = useState(false);
+  const [botGravity,       setBotGravity]       = useState(false);
+  const [botPopOut,        setBotPopOut]        = useState(false);
 
   const isC4 = selectedGame === "c4";
 
@@ -108,6 +110,8 @@ export default function Home({ onRoomJoined, onBotGame }) {
         randomChance:    botRandom,
         powerUpsEnabled: botPowerUps,
         gridSize:        botC4Grid,
+        gravityEnabled:  botGravity,
+        popOutEnabled:   botPopOut,
       });
     } else {
       socket.emit("create_bot_room", {
@@ -344,9 +348,17 @@ export default function Home({ onRoomJoined, onBotGame }) {
                   {botAbilities ? "✓ Abilità ATTIVE" : "⚡ Attiva Abilità Speciali"}
                 </button>
               ) : (
-                <button className={`ability-toggle ${botPowerUps?"enabled":""}`} onClick={() => setBotPowerUps(!botPowerUps)}>
-                  {botPowerUps ? "✓ Power-up ATTIVI" : "⚡ Attiva Power-up"}
-                </button>
+                <>
+                  <button className={`ability-toggle ${botPowerUps?"enabled":""}`} onClick={() => setBotPowerUps(!botPowerUps)}>
+                    {botPowerUps ? "✓ Power-up ATTIVI" : "⚡ Attiva Power-up"}
+                  </button>
+                  <button className={`ability-toggle ${botGravity?"enabled":""}`} style={{marginTop:"8px"}} onClick={() => setBotGravity(!botGravity)}>
+                    {botGravity ? "✓ Gravity ATTIVA" : "🌀 Attiva Gravity"}
+                  </button>
+                  <button className={`ability-toggle ${botPopOut?"enabled":""}`} style={{marginTop:"8px"}} onClick={() => setBotPopOut(!botPopOut)}>
+                    {botPopOut ? "✓ Pop Out ATTIVO" : "🎯 Attiva Pop Out"}
+                  </button>
+                </>
               )}
             </div>
 

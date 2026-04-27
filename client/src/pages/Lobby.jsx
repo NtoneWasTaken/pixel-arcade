@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Tris + Connect 4 + Griglie + Power-ups
+// pages/Lobby.jsx — Tris + Connect 4 + Griglie + Power-ups + Gravity + PopOut
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -25,8 +25,8 @@ const TTT_GRID_OPTIONS = [
 ];
 
 const C4_GRID_OPTIONS = [
-  { label: "6×5", value: "6x5", desc: "Compatta"   },
-  { label: "7×6", value: "7x6", desc: "Classica"   },
+  { label: "6×5", value: "6x5", desc: "Compatta"          },
+  { label: "7×6", value: "7x6", desc: "Classica"          },
   { label: "8×7", value: "8x7", desc: "Epica · 5 in fila" },
 ];
 
@@ -37,7 +37,6 @@ function ScoreDisplay({ room, myId }) {
   const opp = players.find(p => p.id !== myId);
   const myScore  = score[myId]    ?? 0;
   const oppScore = score[opp?.id] ?? 0;
-
   const prevMy  = useRef(myScore);
   const prevOpp = useRef(oppScore);
   const [myGlow,  setMyGlow]  = useState(false);
@@ -47,23 +46,19 @@ function ScoreDisplay({ room, myId }) {
     if (myScore > prevMy.current) { setMyGlow(true); setTimeout(() => setMyGlow(false), 900); }
     prevMy.current = myScore;
   }, [myScore]);
-
   useEffect(() => {
     if (oppScore > prevOpp.current) { setOppGlow(true); setTimeout(() => setOppGlow(false), 900); }
     prevOpp.current = oppScore;
   }, [oppScore]);
 
   if (players.length < 2) return null;
-
   return (
     <div className="score-display">
       <div className={`score-side score-left ${myGlow ? "score-glow-blue" : ""}`}>
-        <span className="score-name-small">{me?.name  || "Tu"}</span>
+        <span className="score-name-small">{me?.name || "Tu"}</span>
         <span className="score-number score-blue">{myScore}</span>
       </div>
-      <div className="score-center">
-        <span className="room-code-label">#{room?.code}</span>
-      </div>
+      <div className="score-center"><span className="room-code-label">#{room?.code}</span></div>
       <div className={`score-side score-right ${oppGlow ? "score-glow-red" : ""}`}>
         <span className="score-name-small">{opp?.name || "Avversario"}</span>
         <span className="score-number score-red">{oppScore}</span>
@@ -82,6 +77,8 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
   const [tttGridSize,      setTttGridSize]      = useState(3);
   const [c4GridSize,       setC4GridSize]       = useState("7x6");
   const [powerUpsEnabled,  setPowerUpsEnabled]  = useState(false);
+  const [gravityEnabled,   setGravityEnabled]   = useState(false);
+  const [popOutEnabled,    setPopOutEnabled]     = useState(false);
 
   const isC4 = selectedGame === "c4";
 
@@ -107,7 +104,7 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
   const handleStart = () => {
     setError("");
     if (isC4) {
-      socket.emit("start_game_c4", { timerSeconds, randomChance, powerUpsEnabled, gridSize: c4GridSize });
+      socket.emit("start_game_c4", { timerSeconds, randomChance, powerUpsEnabled, gridSize: c4GridSize, gravityEnabled, popOutEnabled });
     } else {
       socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize: tttGridSize });
     }
@@ -138,9 +135,7 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
           <p className="code-label">Codice stanza</p>
           <div className="code-display">
             <span className="code-text">{roomCode}</span>
-            <button className="btn btn-ghost btn-sm" onClick={copyCode}>
-              {copied ? "✓ Copiato!" : "Copia"}
-            </button>
+            <button className="btn btn-ghost btn-sm" onClick={copyCode}>{copied ? "✓ Copiato!" : "Copia"}</button>
           </div>
           <p className="code-hint">Condividi questo codice con il tuo avversario</p>
         </div>
@@ -151,9 +146,7 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
         <div className="players-list">
           {room.players.map((p, i) => (
             <div key={p.id} className={`player-slot filled ${p.id === socket.id ? "me" : ""}`}>
-              <span className="player-symbol">
-                {isC4 ? (i === 0 ? "🔴" : "🟡") : (i === 0 ? "✕" : "◯")}
-              </span>
+              <span className="player-symbol">{isC4 ? (i === 0 ? "🔴" : "🟡") : (i === 0 ? "✕" : "◯")}</span>
               <span className="player-name">{p.name}</span>
               <span className="player-badges">
                 {p.isHost && <span className="badge">Host</span>}
@@ -217,7 +210,7 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
             </div>
           </div>
 
-          {/* Abilità Tris / Power-up C4 */}
+          {/* Opzioni specifiche per gioco */}
           {!isC4 ? (
             <div className="timer-section">
               <h3 className="section-title">⚡ Abilità Speciali</h3>
@@ -226,28 +219,43 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
                 <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
                 <div className="ability-preview-item"><span>👁️</span><span>Fantasma</span></div>
               </div>
-              <button
-                className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`}
-                onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}
-              >
+              <button className={`ability-toggle ${abilitiesEnabled ? "enabled" : ""}`} onClick={() => setAbilitiesEnabled(!abilitiesEnabled)}>
                 {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
               </button>
             </div>
           ) : (
-            <div className="timer-section">
-              <h3 className="section-title">⚡ Power-up</h3>
-              <div className="abilities-preview">
-                <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
-                <div className="ability-preview-item"><span>➕</span><span>Extra</span></div>
-                <div className="ability-preview-item"><span>🔀</span><span>Shuffle</span></div>
+            <>
+              {/* Power-up C4 */}
+              <div className="timer-section">
+                <h3 className="section-title">⚡ Power-up</h3>
+                <div className="abilities-preview">
+                  <div className="ability-preview-item"><span>💣</span><span>Bomba</span></div>
+                  <div className="ability-preview-item"><span>➕</span><span>Extra</span></div>
+                  <div className="ability-preview-item"><span>🔀</span><span>Shuffle</span></div>
+                </div>
+                <button className={`ability-toggle ${powerUpsEnabled ? "enabled" : ""}`} onClick={() => setPowerUpsEnabled(!powerUpsEnabled)}>
+                  {powerUpsEnabled ? "✓ Power-up ATTIVI" : "Attiva Power-up"}
+                </button>
               </div>
-              <button
-                className={`ability-toggle ${powerUpsEnabled ? "enabled" : ""}`}
-                onClick={() => setPowerUpsEnabled(!powerUpsEnabled)}
-              >
-                {powerUpsEnabled ? "✓ Power-up ATTIVI" : "Attiva Power-up"}
-              </button>
-            </div>
+
+              {/* Gravity */}
+              <div className="timer-section">
+                <h3 className="section-title">🌀 Modalità Gravity</h3>
+                <p className="mode-hint">La direzione della gravità si inverte ogni 3 turni.</p>
+                <button className={`ability-toggle ${gravityEnabled ? "enabled" : ""}`} onClick={() => setGravityEnabled(!gravityEnabled)}>
+                  {gravityEnabled ? "✓ Gravity ATTIVA" : "Attiva Gravity"}
+                </button>
+              </div>
+
+              {/* Pop Out */}
+              <div className="timer-section">
+                <h3 className="section-title">🎯 Modalità Pop Out</h3>
+                <p className="mode-hint">Puoi rimuovere una tua pedina dal fondo di una colonna.</p>
+                <button className={`ability-toggle ${popOutEnabled ? "enabled" : ""}`} onClick={() => setPopOutEnabled(!popOutEnabled)}>
+                  {popOutEnabled ? "✓ Pop Out ATTIVO" : "Attiva Pop Out"}
+                </button>
+              </div>
+            </>
           )}
         </>
       ) : (
@@ -260,11 +268,7 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
 
       <div className="lobby-actions">
         {isHost ? (
-          <button
-            className={`btn btn-primary btn-lg ${!canStart ? "btn-disabled" : ""}`}
-            onClick={handleStart}
-            disabled={!canStart}
-          >
+          <button className={`btn btn-primary btn-lg ${!canStart ? "btn-disabled" : ""}`} onClick={handleStart} disabled={!canStart}>
             {canStart ? "▶ Inizia Partita" : "In attesa dell'avversario…"}
           </button>
         ) : (

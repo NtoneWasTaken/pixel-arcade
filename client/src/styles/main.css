@@ -1411,53 +1411,107 @@ html, body, #root {
 .game-actions-player { font-size: 0.7rem; color: var(--text-dim); }
 
 /* ============================================================
-   CONNECT 4 — Power-ups + Griglie dinamiche
+   GRAVITY + POP OUT
    ============================================================ */
 
-/* Highlight cella bersaglio bomba */
-.c4-cell-bomba-target {
-  border-color: #ff4444 !important;
-  box-shadow: 0 0 10px rgba(255, 68, 68, 0.6) !important;
+/* Gravity indicator */
+.gravity-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+  transition: background 0.3s, border-color 0.3s;
+  border: 1.5px solid;
+}
+
+.gravity-down-active {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+}
+
+.gravity-up-active {
+  background: rgba(236, 72, 153, 0.12);
+  border-color: rgba(236, 72, 153, 0.3);
+  color: #f9a8d4;
+}
+
+.gravity-icon   { font-size: 1rem; }
+.gravity-label  { font-weight: 800; letter-spacing: 0.08em; }
+.gravity-countdown {
+  font-size: 0.62rem;
+  opacity: 0.7;
+  font-weight: 600;
+}
+
+/* Animazione flip gravità — la board trema leggermente */
+@keyframes gravity-flip {
+  0%   { transform: scale(1) rotate(0deg); }
+  20%  { transform: scale(0.97) rotate(-1deg); }
+  50%  { transform: scale(1.02) rotate(1deg); }
+  80%  { transform: scale(0.98) rotate(-0.5deg); }
+  100% { transform: scale(1) rotate(0deg); }
+}
+
+.gravity-flip-anim {
+  animation: gravity-flip 0.6s ease;
+}
+
+/* Griglia con gravity up — effetto visivo sottile */
+.c4-board.gravity-up {
+  border-color: rgba(236, 72, 153, 0.35);
+  box-shadow: 0 0 14px rgba(236, 72, 153, 0.1);
+}
+
+/* Badge gravity */
+.mode-badge-gravity {
+  background: rgba(99, 102, 241, 0.12);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #a5b4fc;
+}
+
+/* Badge popout */
+.mode-badge-popout {
+  background: rgba(20, 184, 166, 0.1);
+  border-color: rgba(20, 184, 166, 0.25);
+  color: #5eead4;
+}
+
+/* Pop Out row */
+.c4-popout-row {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.c4-popout-btn {
+  height: 22px;
+  background: transparent;
+  border: none;
   cursor: pointer;
-  animation: bomba-pulse 0.6s ease infinite alternate;
+  font-size: 0.65rem;
+  border-radius: 3px;
+  transition: background 0.15s, color 0.15s;
+  color: var(--text-dim);
 }
 
-@keyframes bomba-pulse {
-  from { box-shadow: 0 0 6px rgba(255,68,68,0.4); }
-  to   { box-shadow: 0 0 16px rgba(255,68,68,0.8); }
+.c4-popout-available {
+  color: #5eead4;
+  font-size: 0.8rem;
 }
 
-/* Colonna extra highlight */
-.c4-col-btn.c4-col-extra {
-  background: rgba(0, 255, 136, 0.08);
-  border-radius: 4px;
+.c4-popout-available:hover {
+  background: rgba(20, 184, 166, 0.12);
 }
 
-.indicator-extra {
-  font-size: 0.85rem;
-  animation: bounce-drop 0.5s ease infinite alternate;
-}
-
-/* Badge griglia */
-.mode-badge-grid {
-  background: rgba(139, 92, 246, 0.15);
-  border-color: rgba(139, 92, 246, 0.3);
-  color: #a78bfa;
-}
-
-/* Badge power-up */
-.mode-badge-powerup {
-  background: rgba(245, 197, 24, 0.1);
-  border-color: rgba(245, 197, 24, 0.25);
-  color: var(--gold);
-}
-
-/* Griglia C4 dinamica — celle più piccole su 8x7 */
-.c4-board[style*="repeat(8"] .c4-cell {
-  border-width: 1.5px;
-}
-
-.c4-board[style*="repeat(6"] .c4-piece {
-  width: 86%;
-  height: 86%;
+.c4-popout-disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
 }
