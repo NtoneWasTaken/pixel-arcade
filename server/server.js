@@ -1,5 +1,5 @@
 // ============================================================
-// server.js — Tris + Connect 4 + Power-ups + Griglie + Gravity + PopOut
+// server.js — Tris + Connect 4 + Battleship
 // ============================================================
 const express = require("express");
 const http = require("http");
@@ -8,6 +8,7 @@ const cors = require("cors");
 const { createRoom, getRoom, deleteRoom, addPlayerToRoom, removePlayerFromRoom } = require("./rooms/roomManager");
 const { handleMove: tttMove, initGame: tttInit, skipTurn: tttSkip, handleAbility, getBotMove: tttBot } = require("./games/tictactoe");
 const { handleMove: c4Move, initGame: c4Init, skipTurn: c4Skip, getBotMove: c4Bot, handlePowerUp: c4PowerUp, handlePopOut: c4PopOut } = require("./games/connect4");
+const { initGame: bsInit, placeShips: bsPlace, handleAttack: bsAttack, handlePowerUp: bsPowerUp, skipTurn: bsSkip, getBotMove: bsBotMove, generateRandomShips: bsRandomShips, buildClientBoards, getConfig: bsConfig } = require("./games/battleship");
 
 const app = express();
 const server = http.createServer(app);
@@ -27,22 +28,30 @@ app.get("/", (req, res) => res.json({ status: "ok", message: "Arcade backend run
 
 const turnTimers = new Map();
 
+// ── Timer ────────────────────────────────────────────────────
+
 function startTurnTimer(roomCode) {
   clearTurnTimer(roomCode);
   const room = getRoom(roomCode);
   if (!room || !room.gameState || room.gameState.timerSeconds === 0) return;
+  // Per Battleship, il timer parte solo nella fase playing
+  if (room.gameType === "bs" && room.gameState.phase === "placement") return;
   const ms = room.gameState.timerSeconds * 1000;
   const timeout = setTimeout(() => {
     const r = getRoom(roomCode);
-    if (!r || r.gameState?.status !== "playing") return;
+    if (!r || r.gameState?.phase !== "playing") return;
     const skippedPlayerId = r.gameState.currentTurn;
-    const skipFn = r.gameType === "c4" ? c4Skip : tttSkip;
-    skipFn(r.gameState);
-    io.to(roomCode).emit("turn_skipped", { skippedPlayerId, gameState: r.gameState });
-    if (r.botId && r.gameState.currentTurn === r.botId && r.gameState.status === "playing") {
-      scheduleBotMove(roomCode);
+    if (r.gameType === "bs") {
+      bsSkip(r.gameState);
+      io.to(roomCode).emit("turn_skipped", { skippedPlayerId, gameState: buildBsClientState(r, skippedPlayerId) });
+      if (r.botId && r.gameState.currentTurn === r.botId) scheduleBotMove(roomCode);
+      else startTurnTimer(roomCode);
     } else {
-      startTurnTimer(roomCode);
+      const skipFn = r.gameType === "c4" ? c4Skip : tttSkip;
+      skipFn(r.gameState);
+      io.to(roomCode).emit("turn_skipped", { skippedPlayerId, gameState: r.gameState });
+      if (r.botId && r.gameState.currentTurn === r.botId) scheduleBotMove(roomCode);
+      else startTurnTimer(roomCode);
     }
   }, ms);
   turnTimers.set(roomCode, timeout);
@@ -54,6 +63,8 @@ function clearTurnTimer(roomCode) {
     turnTimers.delete(roomCode);
   }
 }
+
+// ── State helpers ────────────────────────────────────────────
 
 function buildClientState(gameState, forPlayerId) {
   if (!gameState.ghostMove) return gameState;
@@ -87,10 +98,38 @@ function emitC4Update(room, result, eventName = "game_update") {
   }
 }
 
+// Battleship: ogni giocatore riceve una view personalizzata della board
+function buildBsClientState(room, forPlayerId) {
+  const gs = room.gameState;
+  const boards = buildClientBoards(gs, forPlayerId, gs.fogOfWarEnabled);
+  return injectScore({ ...gs, boards }, room);
+}
+
+function emitBsUpdate(room, result, eventName = "attack_result") {
+  if (room.isBot) {
+    const humanSocket = io.sockets.sockets.get(room.humanId);
+    if (humanSocket) humanSocket.emit(eventName, { ...result, gameState: buildBsClientState(room, room.humanId) });
+  } else {
+    room.players.forEach(p => {
+      const s = io.sockets.sockets.get(p.id);
+      if (s) s.emit(eventName, { ...result, gameState: buildBsClientState(room, p.id) });
+    });
+  }
+}
+
+// ── Bot ──────────────────────────────────────────────────────
+
 function scheduleBotMove(roomCode) {
   setTimeout(() => {
     const room = getRoom(roomCode);
-    if (!room || !room.botId || room.gameState?.status !== "playing") return;
+    if (!room || !room.botId) return;
+
+    if (room.gameType === "bs") {
+      scheduleBsBotMove(roomCode);
+      return;
+    }
+
+    if (room.gameState?.phase !== "playing" && room.gameState?.status !== "playing") return;
     if (room.gameState.currentTurn !== room.botId) return;
 
     const botPlayer = room.gameState.players.find(p => p.id === room.botId);
@@ -109,18 +148,40 @@ function scheduleBotMove(roomCode) {
 
     if (result.error) return;
     clearTurnTimer(roomCode);
-
     if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
 
     const humanSocket = io.sockets.sockets.get(room.humanId);
-    if (humanSocket) {
-      humanSocket.emit("game_update", { gameState: injectScore(room.gameState, room), ...result });
-    }
+    if (humanSocket) humanSocket.emit("game_update", { gameState: injectScore(room.gameState, room), ...result });
 
-    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) {
-      startTurnTimer(roomCode);
-    }
+    if (room.gameState.status !== "finished" && room.gameState.timerSeconds > 0) startTurnTimer(roomCode);
   }, 400);
+}
+
+function scheduleBsBotMove(roomCode) {
+  setTimeout(() => {
+    const room = getRoom(roomCode);
+    if (!room || !room.botId || room.gameState?.phase !== "playing") return;
+    if (room.gameState.currentTurn !== room.botId) return;
+
+    const humanId = room.humanId;
+    const humanBoard = room.gameState.boards[humanId];
+    const move = bsBotMove(humanBoard.attacks, humanBoard, room.botDifficulty, room.gameState.size);
+    if (!move) return;
+
+    const result = bsAttack(room.gameState, room.botId, move.row, move.col);
+    if (result.error) return;
+
+    clearTurnTimer(roomCode);
+    if (room.gameState.phase === "finished") { updateScore(room); room.status = "finished"; }
+
+    emitBsUpdate(room, result);
+
+    if (room.gameState.phase !== "finished" && room.gameState.timerSeconds > 0) startTurnTimer(roomCode);
+    // Se il bot ha colpito, gioca di nuovo
+    else if (room.gameState.phase === "playing" && room.gameState.currentTurn === room.botId) {
+      scheduleBsBotMove(roomCode);
+    }
+  }, 600);
 }
 
 // ============================================================
@@ -190,8 +251,33 @@ io.on("connection", (socket) => {
       if (s) s.emit("game_started", { gameState: injectScore(room.gameState, room), gameType: "c4" });
     });
 
-    console.log(`[C4] Avviata — griglia:${gridSize} gravity:${gravityEnabled} popout:${popOutEnabled}`);
     if (timerSeconds > 0) startTurnTimer(code);
+  });
+
+  // ── Avvia Battleship ───────────────────────────────────────
+  socket.on("start_game_bs", ({ timerSeconds = 0, powerUpsEnabled = false, fogOfWarEnabled = false, gridSize = "10x10" } = {}) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room) return;
+    if (room.players[0].id !== socket.id) { socket.emit("error", { message: "Solo l'host può avviare la partita." }); return; }
+    if (room.players.length < 2) { socket.emit("error", { message: "Servono 2 giocatori." }); return; }
+
+    room.status = "playing";
+    room.gameType = "bs";
+    room.gameState = bsInit(room.players, timerSeconds, powerUpsEnabled, fogOfWarEnabled, gridSize);
+
+    // Nella fase di placement ogni giocatore vede solo la propria board
+    room.players.forEach(p => {
+      const s = io.sockets.sockets.get(p.id);
+      if (s) s.emit("game_started", {
+        gameState: injectScore({ ...room.gameState, boards: { [p.id]: room.gameState.boards[p.id] } }, room),
+        gameType: "bs",
+        shipConfig: room.gameState.shipConfig,
+        gridSize,
+      });
+    });
+
+    console.log(`[BS] Avviata — griglia:${gridSize} powerUps:${powerUpsEnabled} fog:${fogOfWarEnabled}`);
   });
 
   // ── Bot Tris ───────────────────────────────────────────────
@@ -240,9 +326,137 @@ io.on("connection", (socket) => {
 
     socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: difficulty, gameType: "c4" });
 
-    console.log(`[C4-BOT] difficoltà:${difficulty} griglia:${gridSize} gravity:${gravityEnabled}`);
     if (room.gameState.currentTurn === BOT_ID) scheduleBotMove(room.code);
     else if (timerSeconds > 0) startTurnTimer(room.code);
+  });
+
+  // ── Bot Battleship ─────────────────────────────────────────
+  socket.on("create_bot_room_bs", ({ playerName, difficulty = "easy", timerSeconds = 0, powerUpsEnabled = false, fogOfWarEnabled = false, gridSize = "10x10" }) => {
+    const BOT_ID = `bot_${Date.now()}`;
+    const human = { id: socket.id, name: playerName || "Guest", isHost: true };
+    const bot   = { id: BOT_ID, name: "🤖 Bot", isHost: false };
+
+    const room = createRoom(human);
+    room.score[socket.id] = 0; room.score[BOT_ID] = 0;
+    room.botId = BOT_ID; room.humanId = socket.id;
+    room.botDifficulty = difficulty; room.isBot = true; room.gameType = "bs";
+
+    addPlayerToRoom(room.code, bot);
+    socket.join(room.code);
+    socket.data.roomCode = room.code;
+    socket.data.playerName = human.name;
+
+    room.status = "playing";
+    room.gameState = bsInit([human, bot], timerSeconds, powerUpsEnabled, fogOfWarEnabled, gridSize);
+
+    // Piazza le navi del bot casualmente
+    const { ships: shipConfig } = bsConfig(gridSize);
+    const botShips = bsRandomShips(room.gameState.size, shipConfig);
+    bsPlace(room.gameState, BOT_ID, botShips);
+
+    // Invia al giocatore umano la fase di placement
+    socket.emit("game_started", {
+      gameState: injectScore({ ...room.gameState, boards: { [socket.id]: room.gameState.boards[socket.id] } }, room),
+      isBot: true,
+      botDifficulty: difficulty,
+      gameType: "bs",
+      shipConfig: room.gameState.shipConfig,
+      gridSize,
+    });
+
+    console.log(`[BS-BOT] Partita vs bot — difficoltà:${difficulty} griglia:${gridSize}`);
+  });
+
+  // ── Piazza navi Battleship ─────────────────────────────────
+  socket.on("place_ships_bs", ({ ships }) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room || room.gameType !== "bs") return;
+    if (room.gameState.phase !== "placement") { socket.emit("error", { message: "Fase di posizionamento terminata." }); return; }
+
+    const result = bsPlace(room.gameState, socket.id, ships);
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
+
+    socket.emit("ships_placed", { ready: true });
+
+    if (result.allReady) {
+      // Entrambi pronti — inizia la partita
+      if (room.isBot) {
+        const humanSocket = io.sockets.sockets.get(room.humanId);
+        if (humanSocket) humanSocket.emit("battle_start", { gameState: buildBsClientState(room, room.humanId) });
+        // Se tocca al bot per primo
+        if (room.gameState.currentTurn === room.botId) scheduleBsBotMove(code);
+        else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+      } else {
+        room.players.forEach(p => {
+          const s = io.sockets.sockets.get(p.id);
+          if (s) s.emit("battle_start", { gameState: buildBsClientState(room, p.id) });
+        });
+        if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+      }
+    } else {
+      // Notifica l'avversario che l'altro è pronto
+      if (!room.isBot) {
+        room.players.forEach(p => {
+          if (p.id !== socket.id) {
+            const s = io.sockets.sockets.get(p.id);
+            if (s) s.emit("opponent_ready", {});
+          }
+        });
+      }
+    }
+  });
+
+  // ── Attacco Battleship ─────────────────────────────────────
+  socket.on("attack_bs", ({ row, col }) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room || room.gameType !== "bs" || room.gameState.phase !== "playing") return;
+
+    const result = bsAttack(room.gameState, socket.id, row, col);
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
+
+    clearTurnTimer(code);
+    if (room.gameState.phase === "finished") { updateScore(room); room.status = "finished"; }
+
+    emitBsUpdate(room, result);
+
+    if (room.gameState.phase === "finished") return;
+
+    // Se ha colpito, continua a giocare
+    if (result.hit) {
+      if (room.isBot || room.gameState.timerSeconds > 0) startTurnTimer(code);
+    } else {
+      if (room.isBot && room.gameState.currentTurn === room.botId) scheduleBsBotMove(code);
+      else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+    }
+  });
+
+  // ── Power-up Battleship ────────────────────────────────────
+  socket.on("use_powerup_bs", ({ powerUpName, row, col, isRow, index }) => {
+    const code = socket.data.roomCode;
+    const room = getRoom(code);
+    if (!room || room.gameType !== "bs" || room.gameState.phase !== "playing") return;
+
+    const result = bsPowerUp(room.gameState, socket.id, powerUpName, { row, col, isRow, index });
+    if (result.error) { socket.emit("error", { message: result.error }); return; }
+
+    clearTurnTimer(code);
+    if (room.gameState.phase === "finished") { updateScore(room); room.status = "finished"; }
+
+    if (room.isBot) {
+      const humanSocket = io.sockets.sockets.get(room.humanId);
+      if (humanSocket) humanSocket.emit("powerup_used_bs", { powerUpName, ...result, gameState: buildBsClientState(room, room.humanId) });
+    } else {
+      room.players.forEach(p => {
+        const s = io.sockets.sockets.get(p.id);
+        if (s) s.emit("powerup_used_bs", { powerUpName, ...result, gameState: buildBsClientState(room, p.id) });
+      });
+    }
+
+    if (room.gameState.phase === "finished") return;
+    if (room.isBot && room.gameState.currentTurn === room.botId) scheduleBsBotMove(code);
+    else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
   });
 
   // ── Mossa Tris ─────────────────────────────────────────────
@@ -282,11 +496,7 @@ io.on("connection", (socket) => {
     clearTurnTimer(code);
 
     if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
-
-    // Se c'è stato un gravity flip, emetti evento dedicato
-    if (result.gravityFlipped) {
-      io.to(code).emit("gravity_flip", { gravityDir: result.gravityDir });
-    }
+    if (result.gravityFlipped) io.to(code).emit("gravity_flip", { gravityDir: result.gravityDir });
 
     emitC4Update(room, result);
 
@@ -306,10 +516,7 @@ io.on("connection", (socket) => {
     clearTurnTimer(code);
 
     if (room.gameState.status === "finished") { updateScore(room); room.status = "finished"; }
-
-    if (result.gravityFlipped) {
-      io.to(code).emit("gravity_flip", { gravityDir: result.gravityDir });
-    }
+    if (result.gravityFlipped) io.to(code).emit("gravity_flip", { gravityDir: result.gravityDir });
 
     emitC4Update(room, { ...result, isPopOut: true });
 
@@ -402,13 +609,25 @@ io.on("connection", (socket) => {
       if (room.gameType === "c4") {
         room.gameState = c4Init([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.powerUpsEnabled, prevGs.gridSize, prevGs.gravityEnabled, prevGs.popOutEnabled);
         socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: room.botDifficulty, gameType: "c4" });
+      } else if (room.gameType === "bs") {
+        room.gameState = bsInit([human, bot], prevGs.timerSeconds, prevGs.powerUpsEnabled, prevGs.fogOfWarEnabled, prevGs.gridSize);
+        const { ships: shipConfig } = bsConfig(prevGs.gridSize);
+        const botShips = bsRandomShips(room.gameState.size, shipConfig);
+        bsPlace(room.gameState, room.botId, botShips);
+        socket.emit("game_started", {
+          gameState: injectScore({ ...room.gameState, boards: { [socket.id]: room.gameState.boards[socket.id] } }, room),
+          isBot: true, botDifficulty: room.botDifficulty, gameType: "bs",
+          shipConfig: room.gameState.shipConfig, gridSize: prevGs.gridSize,
+        });
       } else {
         room.gameState = tttInit([human, bot], prevGs.timerSeconds, prevGs.randomChance, prevGs.abilitiesEnabled, prevGs.gridSize);
         socket.emit("game_started", { gameState: injectScore(room.gameState, room), isBot: true, botDifficulty: room.botDifficulty, gameType: "ttt" });
       }
 
-      if (room.gameState.currentTurn === room.botId) scheduleBotMove(code);
-      else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+      if (room.gameType !== "bs") {
+        if (room.gameState.currentTurn === room.botId) scheduleBotMove(code);
+        else if (room.gameState.timerSeconds > 0) startTurnTimer(code);
+      }
     } else {
       room.status = "waiting";
       room.gameState = null;

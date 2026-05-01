@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Home.jsx — Nome + selezione gioco + azioni stanza
+// pages/Home.jsx — Nome + selezione gioco + azioni stanza (Tris + C4 + Battleship)
 // ============================================================
 import { useState, useEffect } from "react";
 import socket from "../socket/socket";
@@ -29,26 +29,36 @@ const C4_GRID_OPTIONS = [
   { label: "8×7", value: "8x7", desc: "Epica · 5 in fila" },
 ];
 
-export default function Home({ onRoomJoined, onBotGame }) {
-  const [playerName,       setPlayerName]       = useState("");
-  const [joinCode,         setJoinCode]         = useState("");
-  const [step,             setStep]             = useState("name");
-  const [selectedGame,     setSelectedGame]     = useState(null);
-  const [mode,             setMode]             = useState(null);
-  const [error,            setError]            = useState("");
-  const [loading,          setLoading]          = useState(false);
+const BS_GRID_OPTIONS = [
+  { label: "8×8",   value: "8x8",   desc: "Compatta · 4 navi" },
+  { label: "10×10", value: "10x10", desc: "Classica · 5 navi" },
+  { label: "12×12", value: "12x12", desc: "Epica · 6 navi"    },
+];
 
-  const [botDifficulty,    setBotDifficulty]    = useState("easy");
-  const [botTimer,         setBotTimer]         = useState(0);
-  const [botRandom,        setBotRandom]        = useState(0);
-  const [botAbilities,     setBotAbilities]     = useState(false);
-  const [botTttGrid,       setBotTttGrid]       = useState(3);
-  const [botC4Grid,        setBotC4Grid]        = useState("7x6");
-  const [botPowerUps,      setBotPowerUps]      = useState(false);
-  const [botGravity,       setBotGravity]       = useState(false);
-  const [botPopOut,        setBotPopOut]        = useState(false);
+export default function Home({ onRoomJoined, onBotGame }) {
+  const [playerName,    setPlayerName]    = useState("");
+  const [joinCode,      setJoinCode]      = useState("");
+  const [step,          setStep]          = useState("name");
+  const [selectedGame,  setSelectedGame]  = useState(null);
+  const [mode,          setMode]          = useState(null);
+  const [error,         setError]         = useState("");
+  const [loading,       setLoading]       = useState(false);
+
+  // Bot settings
+  const [botDifficulty, setBotDifficulty] = useState("easy");
+  const [botTimer,      setBotTimer]      = useState(0);
+  const [botRandom,     setBotRandom]     = useState(0);
+  const [botAbilities,  setBotAbilities]  = useState(false);
+  const [botTttGrid,    setBotTttGrid]    = useState(3);
+  const [botC4Grid,     setBotC4Grid]     = useState("7x6");
+  const [botBsGrid,     setBotBsGrid]     = useState("10x10");
+  const [botPowerUps,   setBotPowerUps]   = useState(false);
+  const [botGravity,    setBotGravity]    = useState(false);
+  const [botPopOut,     setBotPopOut]     = useState(false);
+  const [botFogOfWar,   setBotFogOfWar]   = useState(false);
 
   const isC4 = selectedGame === "c4";
+  const isBS = selectedGame === "bs";
 
   useEffect(() => {
     if (step !== "actions") return;
@@ -62,8 +72,8 @@ export default function Home({ onRoomJoined, onBotGame }) {
       const me = room.players[room.players.length - 1];
       onRoomJoined({ roomCode: room.code, player: { ...me, isHost: false }, isHost: false, room, game: selectedGame });
     };
-    const handleGameStarted = ({ gameState, isBot, gameType }) => {
-      if (isBot) { setLoading(false); onBotGame({ gameState, gameType }); }
+    const handleGameStarted = ({ gameState, isBot, gameType, shipConfig, gridSize }) => {
+      if (isBot) { setLoading(false); onBotGame({ gameState, gameType, shipConfig, gridSize }); }
     };
     const handleError = ({ message }) => { setLoading(false); setError(message); };
 
@@ -89,10 +99,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
     setSelectedGame(game); setStep("actions"); setMode(null); setError("");
   };
 
-  const handleCreate = () => {
-    setError(""); setLoading(true);
-    socket.emit("create_room", { playerName: playerName.trim() });
-  };
+  const handleCreate = () => { setError(""); setLoading(true); socket.emit("create_room", { playerName: playerName.trim() }); };
 
   const handleJoin = () => {
     if (!joinCode.trim()) { setError("Inserisci il codice stanza!"); return; }
@@ -102,7 +109,16 @@ export default function Home({ onRoomJoined, onBotGame }) {
 
   const handleBotStart = () => {
     setError(""); setLoading(true);
-    if (isC4) {
+    if (isBS) {
+      socket.emit("create_bot_room_bs", {
+        playerName:      playerName.trim(),
+        difficulty:      botDifficulty,
+        timerSeconds:    botTimer,
+        powerUpsEnabled: botPowerUps,
+        fogOfWarEnabled: botFogOfWar,
+        gridSize:        botBsGrid,
+      });
+    } else if (isC4) {
       socket.emit("create_bot_room_c4", {
         playerName:      playerName.trim(),
         difficulty:      botDifficulty,
@@ -152,7 +168,6 @@ export default function Home({ onRoomJoined, onBotGame }) {
           </div>
           {error && <div className="error-msg">⚠ {error}</div>}
           <button className="btn btn-primary" onClick={handleConfirmName}>Continua →</button>
-
           <div className="game-cards-hint">
             <p className="game-cards-hint-label">Giochi disponibili</p>
             <div className="game-cards-preview-row">
@@ -175,6 +190,14 @@ export default function Home({ onRoomJoined, onBotGame }) {
                   ))}
                 </div>
               </div>
+              <div className="game-card-mini game-card-mini-bs">
+                <span className="game-card-mini-title">BATTLESHIP</span>
+                <div className="bs-preview-mini">
+                  {Array(25).fill(null).map((_, i) => (
+                    <span key={i} className={`bs-pre-cell ${[2,3,7,12,17,22].includes(i) ? "bs-pre-ship" : [6,11].includes(i) ? "bs-pre-hit" : i === 1 ? "bs-pre-miss" : ""}`} />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -189,6 +212,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
         {hero}
         <p className="game-select-welcome">Ciao, <span className="player-name-accent">{playerName}</span>! Scegli un gioco.</p>
         <div className="game-select-grid">
+          {/* Tris */}
           <button className="game-card game-card-ttt" onClick={() => handleSelectGame("ttt")}>
             <div className="game-card-preview">
               <div className="ttt-preview-grid">
@@ -211,6 +235,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
             <div className="game-card-cta">GIOCA →</div>
           </button>
 
+          {/* Connect 4 */}
           <button className="game-card game-card-c4" onClick={() => handleSelectGame("c4")}>
             <div className="game-card-preview">
               <div className="c4-preview-grid">
@@ -224,11 +249,34 @@ export default function Home({ onRoomJoined, onBotGame }) {
             </div>
             <div className="game-card-info">
               <h2 className="game-card-title">CONNECT 4</h2>
-              <p className="game-card-desc">Allinea le pedine con modalità Blitz, Random, Power-up e Bot</p>
+              <p className="game-card-desc">Allinea le pedine con Blitz, Random, Power-up, Gravity, Pop Out e Bot</p>
               <div className="game-card-tags">
                 <span className="game-tag">⏱ Blitz</span>
                 <span className="game-tag">🎲 Random</span>
                 <span className="game-tag">⚡ Power-up</span>
+                <span className="game-tag">🌀 Gravity</span>
+                <span className="game-tag">🤖 Bot</span>
+              </div>
+            </div>
+            <div className="game-card-cta">GIOCA →</div>
+          </button>
+
+          {/* Battleship */}
+          <button className="game-card game-card-bs" onClick={() => handleSelectGame("bs")}>
+            <div className="game-card-preview">
+              <div className="bs-preview-grid">
+                {Array(25).fill(null).map((_, i) => (
+                  <span key={i} className={`bs-pre-cell ${[2,3,7,12,17,22].includes(i) ? "bs-pre-ship" : [6,11].includes(i) ? "bs-pre-hit" : i === 1 ? "bs-pre-miss" : ""}`} />
+                ))}
+              </div>
+            </div>
+            <div className="game-card-info">
+              <h2 className="game-card-title">BATTLESHIP</h2>
+              <p className="game-card-desc">Affonda la flotta nemica con Power-up, Nebbia di Guerra e Bot</p>
+              <div className="game-card-tags">
+                <span className="game-tag">⏱ Blitz</span>
+                <span className="game-tag">💥 Power-up</span>
+                <span className="game-tag">🌫️ Nebbia</span>
                 <span className="game-tag">🤖 Bot</span>
                 <span className="game-tag">🔲 3 griglie</span>
               </div>
@@ -242,13 +290,15 @@ export default function Home({ onRoomJoined, onBotGame }) {
   }
 
   // ── Step azioni ────────────────────────────────────────────
+  const gameTitle = isBS ? "BATTLESHIP" : isC4 ? "CONNECT 4" : "TIC TAC TOE";
+
   return (
     <div className="home-page">
       {hero}
       <div className="home-card">
         <div className="game-actions-header">
           <button className="btn btn-ghost btn-sm" onClick={() => { setStep("select"); setMode(null); setError(""); }}>← Giochi</button>
-          <span className="game-actions-title">{isC4 ? "CONNECT 4" : "TIC TAC TOE"}</span>
+          <span className="game-actions-title">{gameTitle}</span>
           <span className="game-actions-player">{playerName}</span>
         </div>
 
@@ -264,9 +314,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
           <div className="mode-section">
             <p className="mode-hint">Verrà generato un codice da condividere con l&apos;amico.</p>
             <div className="action-buttons">
-              <button className="btn btn-primary" onClick={handleCreate} disabled={loading}>
-                {loading ? "Creando…" : "✦ Crea la stanza"}
-              </button>
+              <button className="btn btn-primary" onClick={handleCreate} disabled={loading}>{loading ? "Creando…" : "✦ Crea la stanza"}</button>
               <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>← Indietro</button>
             </div>
           </div>
@@ -282,9 +330,7 @@ export default function Home({ onRoomJoined, onBotGame }) {
                 onKeyDown={e => e.key === "Enter" && handleJoin()} />
             </div>
             <div className="action-buttons">
-              <button className="btn btn-primary" onClick={handleJoin} disabled={loading}>
-                {loading ? "Entrando…" : "⟶ Entra"}
-              </button>
+              <button className="btn btn-primary" onClick={handleJoin} disabled={loading}>{loading ? "Entrando…" : "⟶ Entra"}</button>
               <button className="btn btn-ghost" onClick={() => { setMode(null); setError(""); }}>← Indietro</button>
             </div>
           </div>
@@ -299,17 +345,17 @@ export default function Home({ onRoomJoined, onBotGame }) {
                 <button className={`btn ${botDifficulty==="easy"?"btn-primary":"btn-ghost"}`} onClick={() => setBotDifficulty("easy")}>😊 Facile</button>
                 <button className={`btn ${botDifficulty==="hard"?"btn-primary":"btn-ghost"}`} onClick={() => setBotDifficulty("hard")}>💀 Difficile</button>
               </div>
-              {botDifficulty === "hard" && <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale!</p>}
+              {botDifficulty === "hard" && !isBS && <p className="bot-hard-warning">⚠️ Il bot gioca in modo ottimale!</p>}
             </div>
 
             {/* Griglia */}
             <div className="bot-option-group">
               <p className="bot-option-label">🔲 Griglia</p>
               <div className="timer-options">
-                {(isC4 ? C4_GRID_OPTIONS : TTT_GRID_OPTIONS).map(opt => (
+                {(isBS ? BS_GRID_OPTIONS : isC4 ? C4_GRID_OPTIONS : TTT_GRID_OPTIONS).map(opt => (
                   <button key={opt.value}
-                    className={`timer-option ${(isC4 ? botC4Grid : botTttGrid) === opt.value ? "selected" : ""}`}
-                    onClick={() => isC4 ? setBotC4Grid(opt.value) : setBotTttGrid(opt.value)}>
+                    className={`timer-option ${(isBS ? botBsGrid : isC4 ? botC4Grid : botTttGrid) === opt.value ? "selected" : ""}`}
+                    onClick={() => isBS ? setBotBsGrid(opt.value) : isC4 ? setBotC4Grid(opt.value) : setBotTttGrid(opt.value)}>
                     <span className="timer-icon">{opt.label}</span>
                     <span className="timer-label">{opt.desc}</span>
                   </button>
@@ -329,25 +375,28 @@ export default function Home({ onRoomJoined, onBotGame }) {
               </div>
             </div>
 
-            {/* Random */}
-            <div className="bot-option-group">
-              <p className="bot-option-label">🎲 Random</p>
-              <div className="timer-options">
-                {RANDOM_OPTIONS.map(opt => (
-                  <button key={opt.value} className={`timer-option ${botRandom===opt.value?"selected":""}`} onClick={() => setBotRandom(opt.value)}>
-                    <span className="timer-label">{opt.label}</span>
-                  </button>
-                ))}
+            {/* Random — solo Tris e C4 */}
+            {!isBS && (
+              <div className="bot-option-group">
+                <p className="bot-option-label">🎲 Random</p>
+                <div className="timer-options">
+                  {RANDOM_OPTIONS.map(opt => (
+                    <button key={opt.value} className={`timer-option ${botRandom===opt.value?"selected":""}`} onClick={() => setBotRandom(opt.value)}>
+                      <span className="timer-label">{opt.label}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
 
-            {/* Abilità Tris / Power-up C4 */}
+            {/* Toggle modalità */}
             <div className="bot-option-group">
-              {!isC4 ? (
+              {!isC4 && !isBS && (
                 <button className={`ability-toggle ${botAbilities?"enabled":""}`} onClick={() => setBotAbilities(!botAbilities)}>
                   {botAbilities ? "✓ Abilità ATTIVE" : "⚡ Attiva Abilità Speciali"}
                 </button>
-              ) : (
+              )}
+              {isC4 && (
                 <>
                   <button className={`ability-toggle ${botPowerUps?"enabled":""}`} onClick={() => setBotPowerUps(!botPowerUps)}>
                     {botPowerUps ? "✓ Power-up ATTIVI" : "⚡ Attiva Power-up"}
@@ -357,6 +406,16 @@ export default function Home({ onRoomJoined, onBotGame }) {
                   </button>
                   <button className={`ability-toggle ${botPopOut?"enabled":""}`} style={{marginTop:"8px"}} onClick={() => setBotPopOut(!botPopOut)}>
                     {botPopOut ? "✓ Pop Out ATTIVO" : "🎯 Attiva Pop Out"}
+                  </button>
+                </>
+              )}
+              {isBS && (
+                <>
+                  <button className={`ability-toggle ${botPowerUps?"enabled":""}`} onClick={() => setBotPowerUps(!botPowerUps)}>
+                    {botPowerUps ? "✓ Power-up ATTIVI" : "⚡ Attiva Power-up"}
+                  </button>
+                  <button className={`ability-toggle ${botFogOfWar?"enabled":""}`} style={{marginTop:"8px"}} onClick={() => setBotFogOfWar(!botFogOfWar)}>
+                    {botFogOfWar ? "✓ Nebbia ATTIVA" : "🌫️ Attiva Nebbia di Guerra"}
                   </button>
                 </>
               )}

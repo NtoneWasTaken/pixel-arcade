@@ -1515,3 +1515,246 @@ html, body, #root {
   opacity: 0.2;
   cursor: not-allowed;
 }
+
+/* ============================================================
+   BATTLESHIP
+   ============================================================ */
+
+/* ── Placement page ──────────────────────────────────────── */
+.placement-page {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  max-width: 500px;
+  padding: 16px 0 32px;
+}
+
+.placement-header { text-align: center; }
+.placement-title  { font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0.2em; color: var(--cyan); }
+.placement-subtitle { font-size: 0.78rem; color: var(--text-dim); margin-top: 4px; }
+
+.opponent-ready-badge {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #34d399;
+  background: rgba(52,211,153,0.12);
+  border: 1px solid rgba(52,211,153,0.3);
+  border-radius: 20px;
+  padding: 3px 10px;
+}
+
+.placement-controls {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+/* Griglia placement */
+.placement-grid-wrapper { width: 100%; }
+
+.bs-grid-header-row,
+.bs-grid-row {
+  display: grid;
+  gap: 2px;
+}
+
+.bs-grid-label {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.55rem;
+  color: var(--text-dim);
+  opacity: 0.6;
+  cursor: default;
+}
+
+.bs-label-siluro {
+  cursor: pointer !important;
+  color: var(--cyan) !important;
+  opacity: 1 !important;
+  font-weight: 700;
+}
+.bs-label-siluro:hover { color: var(--gold) !important; }
+
+.placement-grid-body { display: flex; flex-direction: column; gap: 2px; }
+
+.bs-placement-cell {
+  aspect-ratio: 1;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.1s, background 0.1s;
+  background: var(--surface2);
+}
+.bs-placement-cell:hover           { border-color: var(--border2); }
+.bs-placement-cell.bs-cell-ship    { }
+.bs-placement-cell.bs-cell-hover-valid   { border-color: var(--cyan); background: rgba(0,212,255,0.08); }
+.bs-placement-cell.bs-cell-hover-invalid { border-color: #f87171; background: rgba(248,113,113,0.08); }
+
+.bs-ship-dot {
+  width: 60%;
+  height: 60%;
+  border-radius: 2px;
+}
+
+/* Lista navi */
+.ship-list { display: flex; flex-direction: column; gap: 6px; width: 100%; }
+
+.ship-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  background: var(--surface);
+}
+.ship-item:hover        { border-color: var(--border2); }
+.ship-item.ship-placed  { border-color: rgba(52,211,153,0.4); background: rgba(52,211,153,0.05); cursor: default; }
+.ship-item.ship-selected { border-color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+.ship-item-info { display: flex; align-items: center; gap: 10px; }
+.ship-item-name { font-size: 0.78rem; font-weight: 600; color: var(--text); }
+.ship-item-preview { display: flex; gap: 2px; }
+
+.ship-preview-cell {
+  width: 10px; height: 10px; border-radius: 2px;
+}
+
+.ship-item-status { font-size: 0.65rem; color: var(--text-dim); }
+
+.btn-xs { padding: 2px 6px; font-size: 0.65rem; }
+
+/* ── Board di gioco ──────────────────────────────────────── */
+.bs-board-wrapper { width: 100%; }
+
+.bs-cell {
+  aspect-ratio: 1;
+  border: 1.5px solid var(--border);
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.7rem;
+  transition: border-color 0.1s, background 0.1s;
+  background: var(--surface2);
+  position: relative;
+}
+
+.bs-cell-attackable { cursor: crosshair; }
+.bs-cell-attackable:hover { border-color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+.bs-cell-miss { background: rgba(148,163,184,0.08); }
+.bs-miss-dot  { color: var(--text-dim); font-size: 1rem; opacity: 0.5; }
+
+.bs-cell-hit  { background: rgba(248,113,113,0.15); border-color: rgba(248,113,113,0.4); }
+.bs-cell-sunk { background: rgba(248,113,113,0.25); border-color: #f87171; }
+
+.bs-cell-own-ship { }
+.bs-cell-last-hit { animation: bs-hit-flash 0.5s ease; }
+
+@keyframes bs-hit-flash {
+  0%   { transform: scale(1);    box-shadow: 0 0 0 rgba(248,113,113,0); }
+  40%  { transform: scale(1.15); box-shadow: 0 0 12px rgba(248,113,113,0.8); }
+  100% { transform: scale(1);    box-shadow: 0 0 0 rgba(248,113,113,0); }
+}
+
+.bs-siluro-col-row { margin-top: 2px; }
+
+/* ── Boards container ────────────────────────────────────── */
+.bs-boards-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  width: 100%;
+}
+
+.bs-board-section { display: flex; flex-direction: column; gap: 6px; }
+
+.bs-board-title {
+  font-family: var(--font-display);
+  font-size: 0.65rem;
+  letter-spacing: 0.15em;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  text-align: center;
+}
+
+/* ── Fleet status ────────────────────────────────────────── */
+.bs-fleet-status {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 400px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 14px;
+}
+
+.bs-fleet-mine, .bs-fleet-opp {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bs-fleet-opp { align-items: flex-end; }
+
+.bs-fleet-label { font-size: 0.6rem; color: var(--text-dim); letter-spacing: 0.06em; }
+.bs-fleet-count { font-size: 0.8rem; font-weight: 700; color: var(--text); }
+
+/* ── Badge fog ───────────────────────────────────────────── */
+.mode-badge-fog {
+  background: rgba(148,163,184,0.1);
+  border-color: rgba(148,163,184,0.25);
+  color: #94a3b8;
+}
+
+/* ── Home: card Battleship ───────────────────────────────── */
+.game-card-bs:hover {
+  border-color: #f87171;
+  box-shadow: 0 0 20px rgba(248,113,113,0.15);
+}
+.game-card-bs .game-card-title { color: #f87171; }
+.game-card-bs:hover .game-card-cta { color: #f87171; }
+
+/* Preview Battleship nella card */
+.bs-preview-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 3px;
+  width: 80px;
+}
+
+.bs-pre-cell {
+  width: 14px; height: 14px;
+  border-radius: 2px;
+  background: var(--surface2);
+  border: 1px solid var(--border);
+}
+.bs-pre-ship { background: rgba(248,113,113,0.3); border-color: rgba(248,113,113,0.5); }
+.bs-pre-hit  { background: #f87171; border-color: #ef4444; }
+.bs-pre-miss { background: rgba(148,163,184,0.2); }
+
+/* Mini preview nella home (step nome) */
+.game-card-mini-bs { border-color: rgba(248,113,113,0.2); }
+
+.bs-preview-mini {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 2px;
+  width: 65px;
+}
+.bs-preview-mini .bs-pre-cell { width: 11px; height: 11px; }
+
+/* Simbolo battleship in header */
+.bs-symbol { font-size: 1.2rem; }

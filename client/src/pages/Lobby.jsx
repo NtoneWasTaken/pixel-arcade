@@ -1,5 +1,5 @@
 // ============================================================
-// pages/Lobby.jsx — Tris + Connect 4 + Griglie + Power-ups + Gravity + PopOut
+// pages/Lobby.jsx — Tris + Connect 4 + Battleship
 // ============================================================
 import { useState, useEffect, useRef } from "react";
 import socket from "../socket/socket";
@@ -28,6 +28,12 @@ const C4_GRID_OPTIONS = [
   { label: "6×5", value: "6x5", desc: "Compatta"          },
   { label: "7×6", value: "7x6", desc: "Classica"          },
   { label: "8×7", value: "8x7", desc: "Epica · 5 in fila" },
+];
+
+const BS_GRID_OPTIONS = [
+  { label: "8×8",   value: "8x8",   desc: "Compatta · 4 navi"  },
+  { label: "10×10", value: "10x10", desc: "Classica · 5 navi"  },
+  { label: "12×12", value: "12x12", desc: "Epica · 6 navi"     },
 ];
 
 function ScoreDisplay({ room, myId }) {
@@ -76,15 +82,20 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
   const [abilitiesEnabled, setAbilitiesEnabled] = useState(false);
   const [tttGridSize,      setTttGridSize]      = useState(3);
   const [c4GridSize,       setC4GridSize]       = useState("7x6");
+  const [bsGridSize,       setBsGridSize]       = useState("10x10");
   const [powerUpsEnabled,  setPowerUpsEnabled]  = useState(false);
   const [gravityEnabled,   setGravityEnabled]   = useState(false);
   const [popOutEnabled,    setPopOutEnabled]     = useState(false);
+  const [fogOfWarEnabled,  setFogOfWarEnabled]  = useState(false);
 
   const isC4 = selectedGame === "c4";
+  const isBS = selectedGame === "bs";
 
   useEffect(() => {
     const handlePlayerJoined = ({ room: r }) => setRoom(r);
-    const handleGameStarted  = ({ gameState, gameType }) => onGameStart(gameState, gameType);
+    const handleGameStarted  = ({ gameState, gameType, shipConfig, gridSize }) => {
+      onGameStart(gameState, gameType, shipConfig, gridSize);
+    };
     const handlePlayerLeft   = ({ room: r, message }) => { setRoom(r); setError(message); };
     const handleError        = ({ message }) => setError(message);
 
@@ -103,7 +114,9 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
 
   const handleStart = () => {
     setError("");
-    if (isC4) {
+    if (isBS) {
+      socket.emit("start_game_bs", { timerSeconds, powerUpsEnabled, fogOfWarEnabled, gridSize: bsGridSize });
+    } else if (isC4) {
       socket.emit("start_game_c4", { timerSeconds, randomChance, powerUpsEnabled, gridSize: c4GridSize, gravityEnabled, popOutEnabled });
     } else {
       socket.emit("start_game", { timerSeconds, randomChance, abilitiesEnabled, gridSize: tttGridSize });
@@ -120,11 +133,13 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
   const canStart = room.players.length === 2;
   const hasTwo   = room.players.length === 2;
 
+  const lobbyTitle = isBS ? "BATTLESHIP" : isC4 ? "CONNECT 4" : "TIC TAC TOE";
+
   return (
     <div className="lobby-page">
       <div className="lobby-header">
         <button className="btn btn-ghost btn-sm" onClick={onLeave}>← Esci</button>
-        <h2 className="lobby-title">{isC4 ? "CONNECT 4" : "TIC TAC TOE"}</h2>
+        <h2 className="lobby-title">{lobbyTitle}</h2>
         <div />
       </div>
 
@@ -146,7 +161,9 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
         <div className="players-list">
           {room.players.map((p, i) => (
             <div key={p.id} className={`player-slot filled ${p.id === socket.id ? "me" : ""}`}>
-              <span className="player-symbol">{isC4 ? (i === 0 ? "🔴" : "🟡") : (i === 0 ? "✕" : "◯")}</span>
+              <span className="player-symbol">
+                {isBS ? (i === 0 ? "🔵" : "🔴") : isC4 ? (i === 0 ? "🔴" : "🟡") : (i === 0 ? "✕" : "◯")}
+              </span>
               <span className="player-name">{p.name}</span>
               <span className="player-badges">
                 {p.isHost && <span className="badge">Host</span>}
@@ -169,10 +186,10 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
           <div className="timer-section">
             <h3 className="section-title">🔲 Griglia</h3>
             <div className="timer-options">
-              {(isC4 ? C4_GRID_OPTIONS : TTT_GRID_OPTIONS).map(opt => (
+              {(isBS ? BS_GRID_OPTIONS : isC4 ? C4_GRID_OPTIONS : TTT_GRID_OPTIONS).map(opt => (
                 <button key={opt.value}
-                  className={`timer-option ${(isC4 ? c4GridSize : tttGridSize) === opt.value ? "selected" : ""}`}
-                  onClick={() => isC4 ? setC4GridSize(opt.value) : setTttGridSize(opt.value)}>
+                  className={`timer-option ${(isBS ? bsGridSize : isC4 ? c4GridSize : tttGridSize) === opt.value ? "selected" : ""}`}
+                  onClick={() => isBS ? setBsGridSize(opt.value) : isC4 ? setC4GridSize(opt.value) : setTttGridSize(opt.value)}>
                   <span className="timer-icon">{opt.label}</span>
                   <span className="timer-label">{opt.desc}</span>
                 </button>
@@ -195,23 +212,25 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
             </div>
           </div>
 
-          {/* Random */}
-          <div className="timer-section">
-            <h3 className="section-title">🎲 Modalità Random</h3>
-            <div className="timer-options">
-              {RANDOM_OPTIONS.map(opt => (
-                <button key={opt.value}
-                  className={`timer-option ${randomChance === opt.value ? "selected" : ""}`}
-                  onClick={() => setRandomChance(opt.value)}>
-                  <span className="timer-icon">{opt.icon}</span>
-                  <span className="timer-label">{opt.label}</span>
-                </button>
-              ))}
+          {/* Random — solo Tris e C4 */}
+          {!isBS && (
+            <div className="timer-section">
+              <h3 className="section-title">🎲 Modalità Random</h3>
+              <div className="timer-options">
+                {RANDOM_OPTIONS.map(opt => (
+                  <button key={opt.value}
+                    className={`timer-option ${randomChance === opt.value ? "selected" : ""}`}
+                    onClick={() => setRandomChance(opt.value)}>
+                    <span className="timer-icon">{opt.icon}</span>
+                    <span className="timer-label">{opt.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
 
-          {/* Opzioni specifiche per gioco */}
-          {!isC4 ? (
+          {/* Opzioni specifiche */}
+          {!isC4 && !isBS && (
             <div className="timer-section">
               <h3 className="section-title">⚡ Abilità Speciali</h3>
               <div className="abilities-preview">
@@ -223,9 +242,10 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
                 {abilitiesEnabled ? "✓ Abilità ATTIVE" : "Attiva Abilità Speciali"}
               </button>
             </div>
-          ) : (
+          )}
+
+          {isC4 && (
             <>
-              {/* Power-up C4 */}
               <div className="timer-section">
                 <h3 className="section-title">⚡ Power-up</h3>
                 <div className="abilities-preview">
@@ -237,8 +257,6 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
                   {powerUpsEnabled ? "✓ Power-up ATTIVI" : "Attiva Power-up"}
                 </button>
               </div>
-
-              {/* Gravity */}
               <div className="timer-section">
                 <h3 className="section-title">🌀 Modalità Gravity</h3>
                 <p className="mode-hint">La direzione della gravità si inverte ogni 3 turni.</p>
@@ -246,13 +264,34 @@ export default function Lobby({ roomCode, player, initialRoom, selectedGame, onG
                   {gravityEnabled ? "✓ Gravity ATTIVA" : "Attiva Gravity"}
                 </button>
               </div>
-
-              {/* Pop Out */}
               <div className="timer-section">
                 <h3 className="section-title">🎯 Modalità Pop Out</h3>
                 <p className="mode-hint">Puoi rimuovere una tua pedina dal fondo di una colonna.</p>
                 <button className={`ability-toggle ${popOutEnabled ? "enabled" : ""}`} onClick={() => setPopOutEnabled(!popOutEnabled)}>
                   {popOutEnabled ? "✓ Pop Out ATTIVO" : "Attiva Pop Out"}
+                </button>
+              </div>
+            </>
+          )}
+
+          {isBS && (
+            <>
+              <div className="timer-section">
+                <h3 className="section-title">⚡ Power-up</h3>
+                <div className="abilities-preview">
+                  <div className="ability-preview-item"><span>💥</span><span>Bomba 2×2</span></div>
+                  <div className="ability-preview-item"><span>📡</span><span>Radar</span></div>
+                  <div className="ability-preview-item"><span>🎯</span><span>Siluro</span></div>
+                </div>
+                <button className={`ability-toggle ${powerUpsEnabled ? "enabled" : ""}`} onClick={() => setPowerUpsEnabled(!powerUpsEnabled)}>
+                  {powerUpsEnabled ? "✓ Power-up ATTIVI" : "Attiva Power-up"}
+                </button>
+              </div>
+              <div className="timer-section">
+                <h3 className="section-title">🌫️ Nebbia di Guerra</h3>
+                <p className="mode-hint">Vedi solo le navi avversarie affondate, non quelle danneggiate.</p>
+                <button className={`ability-toggle ${fogOfWarEnabled ? "enabled" : ""}`} onClick={() => setFogOfWarEnabled(!fogOfWarEnabled)}>
+                  {fogOfWarEnabled ? "✓ Nebbia ATTIVA" : "Attiva Nebbia di Guerra"}
                 </button>
               </div>
             </>
