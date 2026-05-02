@@ -1,19 +1,16 @@
 // ============================================================
-// socket/socket.js — Singleton Socket.io client
+// socket/socket.js — Socket.io client con cold start detection
 // ============================================================
 import { io } from "socket.io-client";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || "http://localhost:3001";
+const SERVER_URL = import.meta.env.VITE_SERVER_URL || "https://pixel-arcade.onrender.com";
 
-// Connessione singleton: stessa istanza in tutta l'app
-const socket = io(BACKEND_URL, {
-  autoConnect: true,
-  reconnectionAttempts: 5,
-  reconnectionDelay: 1500,
+const socket = io(SERVER_URL, {
+  autoConnect: false,       // connetti manuale così gestiamo il loading
+  reconnection: true,
+  reconnectionAttempts: 10,
+  reconnectionDelay: 2000,
+  timeout: 60000,           // 60s timeout per cold start Render
 });
-
-socket.on("connect", () => console.log("[Socket] Connesso:", socket.id));
-socket.on("disconnect", (reason) => console.log("[Socket] Disconnesso:", reason));
-socket.on("connect_error", (err) => console.error("[Socket] Errore connessione:", err.message));
 
 export default socket;

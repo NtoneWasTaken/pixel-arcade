@@ -1758,3 +1758,246 @@ html, body, #root {
 
 /* Simbolo battleship in header */
 .bs-symbol { font-size: 1.2rem; }
+
+/* ============================================================
+   POLISH — Loading, Toast, Transizioni, Mobile, UX
+   ============================================================ */
+
+/* ── Loading Screen (cold start) ─────────────────────────── */
+.loading-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  width: 100%;
+}
+
+.loading-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  max-width: 320px;
+  text-align: center;
+  padding: 32px 24px;
+}
+
+.loading-logo {
+  animation: loading-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loading-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1;   }
+  50%       { transform: scale(1.1); opacity: 0.7; }
+}
+
+.loading-pixel { font-size: 3rem; }
+
+.loading-msg {
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  min-width: 220px;
+  text-align: center;
+}
+
+.loading-bar-track {
+  width: 200px;
+  height: 4px;
+  background: var(--surface2);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--cyan), #a78bfa);
+  border-radius: 2px;
+  transition: width 0.8s ease;
+}
+
+.loading-sub {
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  opacity: 0.7;
+}
+
+.loading-hint {
+  font-size: 0.65rem;
+  color: var(--text-dim);
+  opacity: 0.5;
+  line-height: 1.5;
+  max-width: 260px;
+}
+
+/* ── Transizioni pagina ───────────────────────────────────── */
+.page-transition {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+}
+
+.page-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.page-hidden {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+}
+
+/* ── Toast notifications ──────────────────────────────────── */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 9999;
+  pointer-events: none;
+  align-items: center;
+}
+
+.toast {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  backdrop-filter: blur(12px);
+  animation: toast-in 0.25s ease forwards;
+  white-space: nowrap;
+  max-width: 90vw;
+  text-align: center;
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.95); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.toast-info    { background: rgba(99,102,241,0.9);  color: #fff; border: 1px solid rgba(255,255,255,0.15); }
+.toast-success { background: rgba(52,211,153,0.9);  color: #0a0a0f; }
+.toast-error   { background: rgba(248,113,113,0.9); color: #fff; }
+.toast-warn    { background: rgba(245,158,11,0.9);  color: #0a0a0f; }
+
+/* ── Mobile responsive fix ────────────────────────────────── */
+@media (max-width: 480px) {
+  .app-wrapper { padding: 8px 8px 40px; }
+
+  .home-hero { padding-top: 24px; }
+  .hero-title { font-size: clamp(2rem, 12vw, 3.5rem); }
+
+  /* Game cards stacked full width su mobile */
+  .game-select-grid { gap: 12px; }
+  .game-card { padding: 14px; }
+  .game-card-preview { display: none; } /* nasconde preview su schermi mini */
+
+  /* Board griglia C4 più piccola */
+  .c4-board { gap: 2px; padding: 5px; }
+  .c4-cell  { border-width: 1px; }
+
+  /* Board Battleship più compatta */
+  .bs-boards-container { gap: 14px; }
+  .bs-cell { border-width: 1px; }
+  .bs-grid-label { font-size: 0.45rem; }
+
+  /* Timer bar */
+  .timer-bar-wrapper { margin: 0 -4px; }
+
+  /* Abilities panel scroll orizzontale su mobile */
+  .abilities-panel {
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .ability-btn { min-width: 70px; }
+
+  /* Score display compatto */
+  .score-number { font-size: 1.5rem; }
+  .score-name-small { font-size: 0.55rem; max-width: 60px; }
+
+  /* Chatbox più bassa su mobile */
+  .chat-messages { height: 100px; }
+
+  /* Placement page */
+  .placement-page { padding: 8px 4px 24px; gap: 10px; }
+  .placement-controls .btn { font-size: 0.7rem; padding: 5px 10px; }
+}
+
+@media (max-width: 360px) {
+  .game-card-tags { display: none; }
+  .c4-col-numbers { display: none; }
+  .bs-grid-label  { display: none; }
+}
+
+/* ── Scrollbar custom ──────────────────────────────────────── */
+::-webkit-scrollbar       { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
+
+/* ── Focus visible migliorato ─────────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--cyan);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Tap highlight rimosso su mobile ─────────────────────── */
+* { -webkit-tap-highlight-color: transparent; }
+
+/* ── Animazione pulsante hover più fluida ─────────────────── */
+.btn {
+  transition: opacity 0.15s, transform 0.12s, box-shadow 0.15s;
+}
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+/* ── Error message migliorato ─────────────────────────────── */
+.error-msg {
+  animation: shake 0.3s ease;
+}
+
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25%       { transform: translateX(-4px); }
+  75%       { transform: translateX(4px); }
+}
+
+/* ── Waiting dot animato ──────────────────────────────────── */
+.waiting-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--cyan);
+  margin-left: 6px;
+  animation: waiting-blink 1s ease infinite;
+}
+
+@keyframes waiting-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%       { opacity: 0.3; transform: scale(0.8); }
+}
+
+/* ── Game card hover più fluido ───────────────────────────── */
+.game-card {
+  transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+
+/* ── Skeleton loader per lobby waiting ───────────────────── */
+.player-slot.empty {
+  animation: skeleton-pulse 1.5s ease infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
